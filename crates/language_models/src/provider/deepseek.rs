@@ -16,12 +16,14 @@ use language_model::{
     LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
     RateLimiter, Role, StopReason,
 };
+use language_model::{get_message_handler_async, AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice, RateLimiter, Role};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
+use language_model::message_handler::{peek_db, AiMessageHandler};
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, prelude::*};
 use util::ResultExt;
@@ -350,12 +352,20 @@ impl LanguageModel for DeepSeekLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
+        let original_request = request.clone();
         let request = into_deepseek(request, &self.model, self.max_output_tokens());
         let stream = self.stream_completion(request, cx);
 
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         async move {
+            let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler.save_completion_req(&original_request, &thread_id).await;
+            }
             let mapper = DeepSeekEventMapper::new();
-            Ok(mapper.map_stream(stream.await?).boxed())
+            Ok(peek_db(mapper.map_stream(stream.await?).boxed(), message_handler, thread_id))
         }
         .boxed()
     }

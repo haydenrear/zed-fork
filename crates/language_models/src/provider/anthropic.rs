@@ -19,7 +19,7 @@ use language_model::{
     LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
     LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
     LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolResultContent, MessageContent, RateLimiter, Role,
+    LanguageModelToolResultContent, MessageContent, RateLimiter, Role, get_message_handler_async,
 };
 use language_model::{LanguageModelCompletionEvent, LanguageModelToolUse, StopReason};
 use schemars::JsonSchema;
@@ -29,6 +29,7 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
+use language_model::message_handler::{peek_db, AiMessageHandler};
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
@@ -475,6 +476,14 @@ impl LanguageModel for AnthropicModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
+        let thread_id = request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+
+        let request_to_save = request.clone();
+
         let request = into_anthropic(
             request,
             self.model.request_id().into(),
@@ -484,13 +493,22 @@ impl LanguageModel for AnthropicModel {
         );
         let request = self.stream_completion(request, cx);
         let future = self.request_limiter.stream(async move {
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler.save_completion_req(&request_to_save, &thread_id).await;
+            }
+
             let response = request
                 .await
                 .map_err(|err| match err.downcast::<AnthropicError>() {
                     Ok(anthropic_err) => anthropic_err_to_anyhow(anthropic_err),
                     Err(err) => anyhow!(err),
                 })?;
-            Ok(AnthropicEventMapper::new().map_stream(response))
+
+            let mapper = AnthropicEventMapper::new();
+            let stream = mapper.map_stream(response);
+
+            Ok(peek_db(stream, message_handler, thread_id.clone()).boxed())
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

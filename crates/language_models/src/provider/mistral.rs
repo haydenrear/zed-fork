@@ -11,6 +11,8 @@ use http_client::HttpClient;
 use language_model::{
     AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, RateLimiter,
+    Role, TokenUsage, get_message_handler_async, LanguageModelToolChoice,
     LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
     LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
     RateLimiter, Role, StopReason,
@@ -21,6 +23,7 @@ use settings::{Settings, SettingsStore};
 use std::str::FromStr;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
+use language_model::message_handler::{peek_db, AiMessageHandler};
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
@@ -365,6 +368,13 @@ impl LanguageModel for MistralLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
+        let thread_id = request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        let prev_request = request.clone();
+
         let request = into_mistral(
             request,
             self.model.id().to_string(),
@@ -373,9 +383,12 @@ impl LanguageModel for MistralLanguageModel {
         let stream = self.stream_completion(request, cx);
 
         async move {
+            if let Some(handler) = &message_handler {
+                handler.save_completion_req(&prev_request, &thread_id).await;
+            }
             let stream = stream.await?;
             let mapper = MistralEventMapper::new();
-            Ok(mapper.map_stream(stream).boxed())
+            Ok(peek_db(mapper.map_stream(stream).boxed(), message_handler, thread_id))
         }
         .boxed()
     }

@@ -17,16 +17,13 @@ use gpui::{
     Action, Animation, AnimationExt, AnyView, App, AsyncApp, Entity, Render, Subscription, Task,
     Transformation, percentage, svg,
 };
-use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelRequestMessage, LanguageModelToolChoice, LanguageModelToolResultContent,
+use language_model::{get_message_handler_async, AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelRequestMessage, LanguageModelToolChoice, LanguageModelToolResultContent,
     LanguageModelToolSchemaFormat, LanguageModelToolUse, MessageContent, RateLimiter, Role,
-    StopReason,
-};
+    StopReason};
 use settings::SettingsStore;
 use std::time::Duration;
+use strum::IntoEnumIterator;
+use language_model::message_handler::{peek_db, AiMessageHandler};
 use ui::prelude::*;
 use util::debug_panic;
 
@@ -271,6 +268,7 @@ impl LanguageModel for CopilotChatLanguageModel {
             }
         }
 
+        let original_request = request.clone();
         let copilot_request = match into_copilot_chat(&self.model, request) {
             Ok(request) => request,
             Err(err) => return futures::future::ready(Err(err)).boxed(),
@@ -279,14 +277,23 @@ impl LanguageModel for CopilotChatLanguageModel {
 
         let request_limiter = self.request_limiter.clone();
         let future = cx.spawn(async move |cx| {
+            let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                 handler.save_completion_req(&original_request, &thread_id).await;
+            }
+
             let request = CopilotChat::stream_completion(copilot_request, cx.clone());
             request_limiter
                 .stream(async move {
                     let response = request.await?;
-                    Ok(map_to_language_model_completion_events(
+                    let mapped_stream = map_to_language_model_completion_events(
                         response,
                         is_streaming,
-                    ))
+                    );
+                    Ok(peek_db(mapped_stream, message_handler, thread_id.clone()).boxed())
                 })
                 .await
         });

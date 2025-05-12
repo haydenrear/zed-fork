@@ -31,14 +31,8 @@ use gpui::{
 };
 use gpui_tokio::Tokio;
 use http_client::HttpClient;
-use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
-    LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName,
-    LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
-    LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role,
-    TokenUsage,
-};
+use language_model::{get_message_handler_async, AuthenticateError, LanguageModel, LanguageModelCacheConfiguration, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role,
+    TokenUsage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -47,6 +41,7 @@ use smol::lock::OnceCell;
 use strum::{EnumIter, IntoEnumIterator, IntoStaticStr};
 use theme::ThemeSettings;
 use tokio::runtime::Handle;
+use language_model::message_handler::{peek_db, AiMessageHandler};
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::{ResultExt, default};
 
@@ -552,6 +547,8 @@ impl LanguageModel for BedrockModel {
             }
         };
 
+        let original_request = request.clone();
+
         let request = match into_bedrock(
             request,
             model_id,
@@ -565,13 +562,23 @@ impl LanguageModel for BedrockModel {
 
         let owned_handle = self.handler.clone();
 
-        let request = self.stream_completion(request, cx);
+        let request_future = self.stream_completion(request, cx);
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         let future = self.request_limiter.stream(async move {
-            let response = request.map_err(|err| anyhow!(err))?.await;
-            Ok(map_to_language_model_completion_events(
+            let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler.save_completion_req(&original_request, &thread_id).await;
+            }
+
+            let response = request_future.map_err(|err| anyhow!(err))?.await;
+            let mapped_stream = map_to_language_model_completion_events(
                 response,
                 owned_handle,
-            ))
+            );
+
+            Ok(peek_db(mapped_stream, message_handler.clone(), thread_id.clone()).boxed())
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

@@ -8,4 +8,6 @@ pub mod lmstudio;
 pub mod mistral;
 pub mod ollama;
 pub mod open_ai;
+mod aisuite;
+mod a2a_agents;
 pub mod open_router;

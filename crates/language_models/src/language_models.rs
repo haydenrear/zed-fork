@@ -4,6 +4,7 @@ use client::{Client, UserStore};
 use fs::Fs;
 use gpui::{App, Context, Entity};
 use language_model::LanguageModelRegistry;
+use language_model::message_handler::{init_message_handler, MessageHandlerConfig};
 use provider::deepseek::DeepSeekLanguageModelProvider;
 
 pub mod provider;
@@ -36,6 +37,8 @@ fn register_language_model_providers(
     client: Arc<Client>,
     cx: &mut Context<LanguageModelRegistry>,
 ) {
+    // smol::spawn(init_message_handler(MessageHandlerConfig { postgres_connection_string: None, enable_storage: true }, cx))
+    //     .detach();
     registry.register_provider(
         CloudLanguageModelProvider::new(user_store.clone(), client.clone(), cx),
         cx,

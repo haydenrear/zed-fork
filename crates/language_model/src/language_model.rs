@@ -5,8 +5,14 @@ mod request;
 mod role;
 mod telemetry;
 
+pub mod message_handler;
+
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake_provider;
+
+pub use crate::message_handler::{get_message_handler_async, Message, MessageType, MessageContent as AiMessageContent};
+use serde_json;
+use std::collections::HashMap;
 
 use anyhow::{Context as _, Result};
 use client::Client;
@@ -24,11 +30,12 @@ use std::str::FromStr as _;
 use std::sync::Arc;
 use thiserror::Error;
 use util::serde::is_default;
+use uuid;
 use zed_llm_client::{
     CompletionRequestStatus, MODEL_REQUESTS_USAGE_AMOUNT_HEADER_NAME,
     MODEL_REQUESTS_USAGE_LIMIT_HEADER_NAME, UsageLimit,
 };
-
+use crate::message_handler::{init_message_handler, AiMessageHandler, MessageHandlerConfig};
 pub use crate::model::*;
 pub use crate::rate_limiter::*;
 pub use crate::registry::*;
@@ -278,32 +285,68 @@ pub trait LanguageModel: Send + Sync {
         request: LanguageModelRequest,
         cx: &AsyncApp,
     ) -> BoxFuture<'static, Result<LanguageModelTextStream>> {
+        // Clone relevant data from the request before moving into the async block
+        println!("Streaming completion text!");
+        let thread_id = request.thread_id.clone();
+
+        let thread_id_value = request.thread_id.clone().unwrap_or("parent".to_string());
+        let messages = request.clone();
+
+        // Get the message handler before async work to avoid thread safety issues
+        let message_handler = cx
+            .update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+
         let future = self.stream_completion(request, cx);
 
         async move {
+
+            // Generate a conversation ID if we need one
+            let conversation_id = thread_id.unwrap_or_else(|| {
+                uuid::Uuid::new_v4().to_string()
+            });
+
             let events = future.await?;
             let mut events = events.fuse();
             let mut message_id = None;
             let mut first_item_text = None;
             let last_token_usage = Arc::new(Mutex::new(TokenUsage::default()));
 
+
+            // if let Some(handler) = &message_handler {
+            //     handler.save_completion_req(&messages, &thread_id_value).await;
+            // }
+
             if let Some(first_event) = events.next().await {
                 match first_event {
                     Ok(LanguageModelCompletionEvent::StartMessage { message_id: id }) => {
+                        // if let Some(handler) = &message_handler {
+                        //     handler.save_completion_event(&LanguageModelCompletionEvent::StartMessage {message_id: id.clone()}, &thread_id_value).await;
+                        // }
                         message_id = Some(id.clone());
                     }
                     Ok(LanguageModelCompletionEvent::Text(text)) => {
+                        // if let Some(handler) = &message_handler {
+                        //     handler.save_completion_event(&LanguageModelCompletionEvent::Text(text.clone()) , &thread_id_value).await;
+                        // }
+
                         first_item_text = Some(text);
                     }
                     _ => (),
                 }
             }
 
+            // let events = AiMessageHandler::inspect_stream(events, message_handler.unwrap(), conversation_id.clone());
             let stream = futures::stream::iter(first_item_text.map(Ok))
                 .chain(events.filter_map({
                     let last_token_usage = last_token_usage.clone();
+                    let conversation_id = conversation_id.clone();
+
                     move |result| {
                         let last_token_usage = last_token_usage.clone();
+                        let thread_id_value = conversation_id.clone();
+
+
                         async move {
                             match result {
                                 Ok(LanguageModelCompletionEvent::StatusUpdate { .. }) => None,
@@ -322,6 +365,7 @@ pub trait LanguageModel: Send + Sync {
                     }
                 }))
                 .boxed();
+
 
             Ok(LanguageModelTextStream {
                 message_id,

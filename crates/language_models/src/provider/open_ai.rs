@@ -11,9 +11,9 @@ use http_client::HttpClient;
 use language_model::{
     AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, RateLimiter, Role,
+    TokenUsage, get_message_handler_async, LanguageModelToolChoice, LanguageModelToolResultContent,LanguageModelToolUse,
+    MessageContent, StopReason,
 };
 use open_ai::{ImageUrl, Model, ResponseStreamEvent, stream_completion};
 use schemars::JsonSchema;
@@ -26,7 +26,8 @@ use strum::IntoEnumIterator;
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
-
+use uuid::uuid;
+use language_model::message_handler::{peek_db, AiMessageHandler};
 use crate::{AllLanguageModelSettings, ui::InstructionListItem};
 
 const PROVIDER_ID: &str = "openai";
@@ -341,11 +342,25 @@ impl LanguageModel for OpenAiLanguageModel {
             >,
         >,
     > {
+        let original_request = request.clone();
+        let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        // Save request messages if handler is available
+
         let request = into_open_ai(request, &self.model, self.max_output_tokens());
         let completions = self.stream_completion(request, cx);
         async move {
+            if let Some(handler) = &message_handler {
+                handler.save_completion_req(&original_request, &thread_id).await;
+            }
+
             let mapper = OpenAiEventMapper::new();
-            Ok(mapper.map_stream(completions.await?).boxed())
+            let stream = mapper.map_stream(completions.await?);
+
+            Ok(peek_db(stream, message_handler, thread_id.clone()).boxed())
         }
         .boxed()
     }
