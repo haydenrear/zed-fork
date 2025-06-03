@@ -4886,6 +4886,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3d8a32ae18130a3c84dd492d4215c3d913c3b07c6b63c2eb3eb7ff1101ab7bf"
 
 [[package]]
+name = "enum-fields"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6ab3b677e9fb8a2b83065a94fad93d2f5b4e5f8759971a76d0fd4c20c2d275f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "enumflags2"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8858,6 +8869,7 @@ dependencies = [
  "chrono",
  "client",
  "collections",
+ "enum-fields",
  "futures 0.3.31",
  "gpui",
  "http_client",

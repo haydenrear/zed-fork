@@ -12,7 +12,7 @@ use gpui::Global;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-
+use enum_fields::EnumFields;
 pub use postgres::PostgresDatabaseClient;
 // pub use example::run_message_handler_example;
 pub use registry::{
@@ -63,7 +63,7 @@ pub struct ToolCallContent {
 }
 
 /// Base message structure compatible with LangGraph and Java schema
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, EnumFields)]
 #[serde(tag = "type")]
 pub enum Message {
     #[serde(rename = "human")]

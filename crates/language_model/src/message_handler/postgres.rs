@@ -62,7 +62,7 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
         .map(|p| Ok(()))?
     }
 
-    fn _parse_sql_query(ids: &RequestIds, json: &String) -> String {
+    fn _parse_sql_query(ids: &RequestIds, json: &String, task_path: &str) -> String {
         let json = json.replace("'", "");
 
         let f = format!(
@@ -88,7 +88,7 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
                             ),
                     'UTF8');
                 "#,
-            &ids.thread_id, &ids.prompt_id, &ids.session_id, &ids.checkpoint_id, &json, "standard", &json
+            &ids.thread_id, &ids.prompt_id, &ids.session_id, &ids.checkpoint_id, &json, task_path, &json
         );
 
         log::info!("Here is sql query\n{}", &f);
@@ -107,11 +107,24 @@ impl DatabaseClient for PostgresDatabaseClient {
             return;
         }
 
+        let task_paths = message.iter()
+            .flat_map(|f| {
+                f.response_metadata().get("intent").cloned().into_iter()
+                    .map(|j| j.to_string())
+            })
+            .collect::<Vec<String>>();
+
+        let mut task_path = "standard";
+
+        if task_paths.iter().all(|t| t.eq("ThreadSummarization")) {
+            task_path = "summarization";
+        }
+
         let message_json_res = serde_json::to_string(&message_clone);
 
         if let Ok(json) = &message_json_res {
             let json = message_json_res.unwrap();
-            let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(ids, &json))
+            let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(ids, &json, task_path))
                 .execute(&*pool.unwrap())
                 .await;
 
