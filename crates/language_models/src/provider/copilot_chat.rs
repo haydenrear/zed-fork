@@ -30,6 +30,7 @@ use util::debug_panic;
 use super::anthropic::count_anthropic_tokens;
 use super::google::count_google_tokens;
 use super::open_ai::count_open_ai_tokens;
+use uuid::uuid;
 
 const PROVIDER_ID: &str = "copilot_chat";
 const PROVIDER_NAME: &str = "GitHub Copilot Chat";

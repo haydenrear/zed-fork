@@ -18,19 +18,19 @@ impl PostgresDatabaseClient {
         //
         // tracing::info!("connection opened");
 
-        // let pool = PgPoolOptions::new()
-        //     .max_connections(5)
-        //     .acquire_timeout(Duration::from_secs(3))
-        //     .connect("postgresql://postgres:postgres@localhost:5488/postgres")
-        //     .await?;
-        //
-        //
-        // println!("Connecting to postgres");
-        //
-        // // Ensure tables exist
-        // Self::initialize_schema(&pool).await?;
-        //
-        // println!("Initialized schema.");
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(3))
+            .connect("postgresql://postgres:postgres@localhost:5488/postgres")
+            .await?;
+
+
+        println!("Connecting to postgres");
+
+        // Ensure tables exist
+        Self::initialize_schema(&pool).await?;
+
+        println!("Initialized schema.");
 
         Ok(Self {
             pool: None,

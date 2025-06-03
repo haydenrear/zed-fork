@@ -4,12 +4,14 @@ use futures::Stream;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
-use language_model::{get_message_handler_async, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelToolChoice};
+use language_model::{get_message_handler_async};
 use language_model::{
     AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
     StopReason,
 };
+
+use uuid::uuid;
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,

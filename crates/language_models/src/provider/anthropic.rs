@@ -4,6 +4,8 @@ use anthropic::{
     AnthropicError, AnthropicModelMode, ContentDelta, Event, ResponseContent, ToolResultContent,
     ToolResultPart, Usage,
 };
+
+use uuid::uuid;
 use anyhow::{Context as _, Result, anyhow};
 use collections::{BTreeMap, HashMap};
 use credentials_provider::CredentialsProvider;

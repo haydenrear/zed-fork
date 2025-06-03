@@ -26,6 +26,7 @@ use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
 
 use crate::{AllLanguageModelSettings, ui::InstructionListItem};
+use uuid::uuid;
 
 const PROVIDER_ID: &str = "openrouter";
 const PROVIDER_NAME: &str = "OpenRouter";

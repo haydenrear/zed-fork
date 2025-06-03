@@ -37,7 +37,7 @@ use util::ResultExt;
 
 use crate::AllLanguageModelSettings;
 use crate::ui::InstructionListItem;
-
+use uuid::uuid;
 const PROVIDER_ID: &str = "google";
 const PROVIDER_NAME: &str = "Google AI";
 

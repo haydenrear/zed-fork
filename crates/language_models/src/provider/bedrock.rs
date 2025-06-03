@@ -46,7 +46,7 @@ use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::{ResultExt, default};
 
 use crate::AllLanguageModelSettings;
-
+use uuid::uuid;
 const PROVIDER_ID: &str = "amazon-bedrock";
 const PROVIDER_NAME: &str = "Amazon Bedrock";
 

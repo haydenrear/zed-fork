@@ -10,11 +10,8 @@ use gpui::{
 };
 use http_client::HttpClient;
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason,
+    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
+    StopReason,
 };
 use language_model::{get_message_handler_async, AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice, RateLimiter, Role};
 use schemars::JsonSchema;
@@ -29,6 +26,7 @@ use ui::{Icon, IconName, List, prelude::*};
 use util::ResultExt;
 
 use crate::{AllLanguageModelSettings, ui::InstructionListItem};
+use uuid::uuid;
 
 const PROVIDER_ID: &str = "deepseek";
 const PROVIDER_NAME: &str = "DeepSeek";

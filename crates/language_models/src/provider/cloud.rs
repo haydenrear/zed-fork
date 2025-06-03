@@ -1,5 +1,6 @@
 use anthropic::{AnthropicModelMode, parse_prompt_too_long};
 use anyhow::{Context as _, Result, anyhow};
+use uuid::uuid;
 use client::{Client, UserStore, zed_urls};
 use futures::{
     AsyncBufReadExt, FutureExt, Stream, StreamExt, future::BoxFuture, stream::BoxStream,
@@ -893,8 +894,7 @@ impl LanguageModel for CloudLanguageModel {
                     Ok(model) => model,
                     Err(err) => return async move { Err(anyhow!(err)) }.boxed(),
                 };
-                let request = into_open_ai(request, model, model.max_output_tokens());
-                let request = into_open_ai(request, &model, None);
+                let request = into_open_ai(request, &model, model.max_output_tokens());
                 let llm_api_token = self.llm_api_token.clone();
                 let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
