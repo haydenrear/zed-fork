@@ -60,7 +60,7 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<
 
     let message_handler = AiMessageHandler::new(None);
 
-    println!("Setting global message handler");
+    log::info!("Setting global message handler");
 
     let mut registry = MessageHandlerRegistry::default();
     registry.message_handler = Some(Arc::new(message_handler));

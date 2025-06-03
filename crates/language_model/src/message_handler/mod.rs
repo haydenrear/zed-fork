@@ -397,7 +397,7 @@ impl AiMessageHandler {
         checkpoint_id: &str,
     ) {
         if let Some(db_client) = &self.database_client {
-            println!("Saving appending...");
+            log::debug!("Saving appending...");
             db_client
                 .save_append_messages(message, thread_id, checkpoint_id)
                 .await;

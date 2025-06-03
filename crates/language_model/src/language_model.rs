@@ -16,7 +16,7 @@ pub use crate::message_handler::{
 use serde_json;
 use std::collections::HashMap;
 
-use crate::message_handler::{AiMessageHandler, MessageHandlerConfig, init_message_handler};
+use crate::message_handler::{AiMessageHandler, MessageHandlerConfig, init_message_handler, peek_db};
 pub use crate::model::*;
 pub use crate::rate_limiter::*;
 pub use crate::registry::*;
@@ -67,7 +67,6 @@ pub fn _retrieve_ids(request: &LanguageModelRequest) -> (String, String) {
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     (thread_id, checkpoint_id)
 }
-
 
 /// Configuration for caching language model messages.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -284,7 +283,6 @@ pub trait LanguageModel: Send + Sync {
         cx: &App,
     ) -> BoxFuture<'static, Result<usize>>;
 
-
     fn stream_completion(
         &self,
         request: LanguageModelRequest,
@@ -301,64 +299,26 @@ pub trait LanguageModel: Send + Sync {
         request: LanguageModelRequest,
         cx: &AsyncApp,
     ) -> BoxFuture<'static, Result<LanguageModelTextStream>> {
-        // Clone relevant data from the request before moving into the async block
-        println!("Streaming completion text!");
-        let thread_id = request.thread_id.clone();
-        let session_id = request.session_id.clone();
-        let messages = request.clone();
-
-        // Get the message handler before async work to avoid thread safety issues
-        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
-
         let future = self.stream_completion(request, cx);
 
         async move {
-            // Use session_id first, then thread_id, then generate new UUID as fallback
-            let conversation_id = session_id.or_else(|| thread_id).unwrap_or_else(|| {
-                log::warn!("No session_id or thread_id provided, generating new conversation ID");
-                uuid::Uuid::new_v4().to_string()
-            });
-
             let events = future.await?;
             let mut events = events.fuse();
             let mut message_id = None;
             let mut first_item_text = None;
             let last_token_usage = Arc::new(Mutex::new(TokenUsage::default()));
 
-            // if let Some(handler) = &message_handler {
-            //     handler.save_completion_req(&messages, &thread_id_value, &checkpoint_id_value).await;
-            // }
-
             if let Some(first_event) = events.next().await {
                 match first_event {
                     Ok(LanguageModelCompletionEvent::StartMessage { message_id: id }) => {
-                        // if let Some(handler) = &message_handler {
-                        //     handler.save_completion_event(&LanguageModelCompletionEvent::StartMessage {message_id: id.clone()}, &thread_id_value).await;
-                        // }
                         message_id = Some(id.clone());
                     }
                     Ok(LanguageModelCompletionEvent::Text(text)) => {
-                        // if let Some(handler) = &message_handler {
-                        //     handler.save_completion_event(&LanguageModelCompletionEvent::Text(text.clone()) , &thread_id_value).await;
-                        // }
-
                         first_item_text = Some(text);
                     }
                     _ => (),
                 }
             }
-
-            // Use conversation_id for database operations if message handler is available
-            let events = if let Some(handler) = message_handler.as_ref() {
-                AiMessageHandler::inspect_stream(
-                    events,
-                    handler.clone(),
-                    conversation_id.clone(),
-                    conversation_id.clone(),
-                )
-            } else {
-                events
-            };
 
             let stream = futures::stream::iter(first_item_text.map(Ok))
                 .chain(events.filter_map({
