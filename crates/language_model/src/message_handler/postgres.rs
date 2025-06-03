@@ -1,7 +1,7 @@
 use crate::message_handler::{DatabaseClient, Message};
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::{PgPool, postgres::PgPoolOptions, PgConnection, Connection, Executor};
+use sqlx::{Connection, Executor, PgConnection, PgPool, postgres::PgPoolOptions};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,7 +20,6 @@ impl PostgresDatabaseClient {
             .acquire_timeout(Duration::from_secs(3))
             .connect("postgresql://postgres:postgres@localhost:5488/postgres")
             .await?;
-
 
         log::info!("Connecting to postgres");
 
@@ -59,10 +58,10 @@ create index if not exists  ide_checkpoints_thread_id_idx
     }
 
     fn _parse_sql_query(thread_id: &&String, json: &String, checkpoint_id: &String) -> String {
-
         let json = json.replace("'", "");
 
-        let f = format!(r#"
+        let f = format!(
+            r#"
                 INSERT INTO ide_checkpoints (thread_id, checkpoint_ts, checkpoint_id, blob, task_path)
                 VALUES ('{}',
                         now(),
@@ -81,9 +80,9 @@ create index if not exists  ide_checkpoints_thread_id_idx
                                 )::text
                             ),
                     'UTF8');
-                "#, &thread_id, &checkpoint_id, &json, "standard", &json);
-
-
+                "#,
+            &thread_id, &checkpoint_id, &json, "standard", &json
+        );
 
         log::info!("Here is sql query\n{}", &f);
 
@@ -92,12 +91,17 @@ create index if not exists  ide_checkpoints_thread_id_idx
 }
 
 impl DatabaseClient for PostgresDatabaseClient {
-    async fn save_append_messages(&self, message: Vec<Message>, thread_id: &str, checkpoint_id: &str) {
-
+    async fn save_append_messages(
+        &self,
+        message: Vec<Message>,
+        thread_id: &str,
+        checkpoint_id: &str,
+    ) {
         let message_clone = message.clone();
         let pool = self.pool.clone();
 
         if pool.as_ref().is_none() {
+            log::error!("Database pool is not initialized");
             return;
         }
 
@@ -105,22 +109,18 @@ impl DatabaseClient for PostgresDatabaseClient {
         let checkpoint_id = &checkpoint_id.to_string();
 
         let message_json_res = serde_json::to_string(&message_clone);
-        println!("Performing...");
-        if message_json_res.as_ref().is_ok() {
-            println!("Performing... is ok...");
+
+        if let Ok(json) = &message_json_res {
             let json = message_json_res.unwrap();
-            let sql_res = sqlx::raw_sql(
-                &Self::_parse_sql_query(&thread_id, &json, checkpoint_id)
-            )
-            .execute(&*pool.unwrap())
-            .await;
+            let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(&thread_id, &json, checkpoint_id))
+                .execute(&*pool.unwrap())
+                .await;
 
-            if sql_res.is_err() {
-                println!("Found sql err {}!", &sql_res.err().unwrap());
+            if let Err(e) = sql_res {
+                log::error!("Found sql err {}!", &e);
             }
-
-        } else {
-            println!("Found err: {}", &message_json_res.err().unwrap());
+        } else if let Err(e) = &message_json_res {
+            log::error!("Found err: {}", &e);
         }
     }
 }

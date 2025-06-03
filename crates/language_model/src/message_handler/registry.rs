@@ -35,7 +35,7 @@ impl Default for MessageHandlerConfig {
 /// Initialize the message handler with the given configuration
 pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<Result<()>> {
 
-    println!("Initializing connection string");
+    log::info!("Initializing connection string");
 
     let connection_string = match &config.postgres_connection_string {
         Some(cs) => cs.clone(),
@@ -48,7 +48,7 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<
         }
     };
 
-    println!("Initializing connection string");
+    log::info!("Initializing connection string");
 
     if cx.has_global::<MessageHandlerRegistry>() {
         let option = get_message_handler(cx);
@@ -67,11 +67,11 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<
     registry.message_handler = Some(Arc::new(message_handler));
     cx.set_global(registry);
 
-    println!("Setting global message handler");
+    log::info!("Setting global postgres message handler");
 
     cx.spawn(async move |t| {
         let t: &mut AsyncApp = t;
-        println!("Connection initializing");
+        log::info!("Postgres Connection initializing");
         let db_client = PostgresDatabaseClient::new(&connection_string).await?;
         let out = t.update_global::<MessageHandlerRegistry, Result<()>>(|g, c| {
             g.message_handler = Some(Arc::new(AiMessageHandler::new(Some(Arc::new(db_client)))));
