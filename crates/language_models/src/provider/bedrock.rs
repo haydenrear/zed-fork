@@ -583,7 +583,7 @@ impl LanguageModel for BedrockModel {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
                 handler
-                    .save_completion_req(&original_request, &thread_id)
+                    .save_completion_req(&original_request, &thread_id, &checkpoint_id)
                     .await;
             }
 

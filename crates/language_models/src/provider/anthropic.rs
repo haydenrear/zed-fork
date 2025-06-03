@@ -5,7 +5,6 @@ use anthropic::{
     ToolResultPart, Usage,
 };
 
-use uuid::uuid;
 use anyhow::{Context as _, Result, anyhow};
 use collections::{BTreeMap, HashMap};
 use credentials_provider::CredentialsProvider;
@@ -16,6 +15,7 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, peek_db};
 use language_model::{
     AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
     LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
@@ -31,10 +31,10 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
-use language_model::message_handler::{peek_db, AiMessageHandler};
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
+use uuid::uuid;
 
 const PROVIDER_ID: &str = language_model::ANTHROPIC_PROVIDER_ID;
 const PROVIDER_NAME: &str = "Anthropic";
@@ -478,12 +478,17 @@ impl LanguageModel for AnthropicModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let thread_id = request.prompt_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let checkpoint_id = request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let thread_id = request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let checkpoint_id = request
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
-
 
         let request_to_save = request.clone();
 
@@ -498,7 +503,9 @@ impl LanguageModel for AnthropicModel {
         let future = self.request_limiter.stream(async move {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&request_to_save, &thread_id).await;
+                handler
+                    .save_completion_req(&request_to_save, &thread_id, &checkpoint_id)
+                    .await;
             }
 
             let response = request
@@ -511,7 +518,13 @@ impl LanguageModel for AnthropicModel {
             let mapper = AnthropicEventMapper::new();
             let stream = mapper.map_stream(response);
 
-            Ok(peek_db(stream, message_handler, thread_id.clone(), checkpoint_id.clone()).boxed())
+            Ok(peek_db(
+                stream,
+                message_handler,
+                thread_id.clone(),
+                checkpoint_id.clone(),
+            )
+            .boxed())
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

@@ -124,22 +124,26 @@ impl AiMessageHandler {
         &self,
         request_message: &LanguageModelRequest,
         thread_id: &str,
+        checkpoint_id: &str,
     ) {
         let collected = request_message
             .messages
             .iter()
-            .flat_map(|r| Self::map_from_completion_request(r).into_iter())
+            .flat_map(|r| Self::map_from_completion_request(r, thread_id).into_iter())
             .collect::<Vec<Message>>();
-        self.save_append_messages(collected, thread_id, "").await;
+        self.save_append_messages(collected, thread_id, checkpoint_id)
+            .await;
     }
 
     pub async fn save_completion_request(
         &self,
         request_message: &LanguageModelRequestMessage,
         thread_id: &str,
+        checkpoint_id: &str,
     ) {
-        if let Some(msg) = Self::map_from_completion_request(request_message) {
-            self.save_append_messages(vec![msg], thread_id, "").await;
+        if let Some(msg) = Self::map_from_completion_request(request_message, thread_id) {
+            self.save_append_messages(vec![msg], thread_id, checkpoint_id)
+                .await;
         }
     }
 
@@ -157,25 +161,26 @@ impl AiMessageHandler {
 
     pub fn map_from_completion_request(
         request_message: &LanguageModelRequestMessage,
+        thread_id: &str,
     ) -> Option<Message> {
         let content = serde_json::to_string(&request_message.content).unwrap();
         match &request_message.role {
             Role::User => Some(Message {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: thread_id.to_string(),
                 message_type: MessageType::HumanMessage,
                 content: vec![MessageContent::Text(content.clone())],
                 timestamp: Self::now_ts(),
                 metadata: HashMap::new(),
             }),
             Role::System => Some(Message {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: thread_id.to_string(),
                 message_type: MessageType::SystemMessage,
                 content: vec![MessageContent::Text(content)],
                 timestamp: Self::now_ts(),
                 metadata: HashMap::new(),
             }),
             Role::Assistant => Some(Message {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: thread_id.to_string(),
                 message_type: MessageType::AiMessage,
                 content: vec![MessageContent::Text(content)],
                 timestamp: Self::now_ts(),

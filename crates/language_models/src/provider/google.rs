@@ -428,7 +428,9 @@ impl LanguageModel for GoogleLanguageModel {
         let request = self.stream_completion(request, cx);
         let future = self.request_limiter.stream(async move {
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&prev_request, &thread_id).await;
+                handler
+                    .save_completion_req(&prev_request, &thread_id, &checkpoint_id)
+                    .await;
             }
             let response = request
                 .await

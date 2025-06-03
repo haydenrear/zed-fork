@@ -848,7 +848,7 @@ impl LanguageModel for CloudLanguageModel {
 
                     if let Some(handler) = &message_handler {
                         handler
-                            .save_completion_req(&original_request, &thread_id)
+                            .save_completion_req(&original_request, &thread_id, &checkpoint_id)
                             .await;
                     }
 
@@ -922,7 +922,7 @@ impl LanguageModel for CloudLanguageModel {
                 let future = self.request_limiter.stream(async move {
                     if let Some(handler) = &message_handler {
                         handler
-                            .save_completion_req(&original_request, &thread_id)
+                            .save_completion_req(&original_request, &thread_id, &checkpoint_id)
                             .await;
                     }
 

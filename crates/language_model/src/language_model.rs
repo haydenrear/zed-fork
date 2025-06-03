@@ -10,10 +10,19 @@ pub mod message_handler;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake_provider;
 
-pub use crate::message_handler::{get_message_handler_async, Message, MessageType, MessageContent as AiMessageContent};
+pub use crate::message_handler::{
+    Message, MessageContent as AiMessageContent, MessageType, get_message_handler_async,
+};
 use serde_json;
 use std::collections::HashMap;
 
+use crate::message_handler::{AiMessageHandler, MessageHandlerConfig, init_message_handler};
+pub use crate::model::*;
+pub use crate::rate_limiter::*;
+pub use crate::registry::*;
+pub use crate::request::*;
+pub use crate::role::*;
+pub use crate::telemetry::*;
 use anyhow::{Context as _, Result};
 use client::Client;
 use futures::FutureExt;
@@ -35,13 +44,6 @@ use zed_llm_client::{
     CompletionRequestStatus, MODEL_REQUESTS_USAGE_AMOUNT_HEADER_NAME,
     MODEL_REQUESTS_USAGE_LIMIT_HEADER_NAME, UsageLimit,
 };
-use crate::message_handler::{init_message_handler, AiMessageHandler, MessageHandlerConfig};
-pub use crate::model::*;
-pub use crate::rate_limiter::*;
-pub use crate::registry::*;
-pub use crate::request::*;
-pub use crate::role::*;
-pub use crate::telemetry::*;
 
 pub const ZED_CLOUD_PROVIDER_ID: &str = "zed.dev";
 
@@ -293,18 +295,13 @@ pub trait LanguageModel: Send + Sync {
         let messages = request.clone();
 
         // Get the message handler before async work to avoid thread safety issues
-        let message_handler = cx
-            .update(|cx| get_message_handler_async(cx)).ok().flatten();
-
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
 
         let future = self.stream_completion(request, cx);
 
         async move {
-
             // Generate a conversation ID if we need one
-            let conversation_id = thread_id.unwrap_or_else(|| {
-                uuid::Uuid::new_v4().to_string()
-            });
+            let conversation_id = thread_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
             let events = future.await?;
             let mut events = events.fuse();
@@ -312,9 +309,8 @@ pub trait LanguageModel: Send + Sync {
             let mut first_item_text = None;
             let last_token_usage = Arc::new(Mutex::new(TokenUsage::default()));
 
-
             // if let Some(handler) = &message_handler {
-            //     handler.save_completion_req(&messages, &thread_id_value).await;
+            //     handler.save_completion_req(&messages, &thread_id_value, &checkpoint_id_value).await;
             // }
 
             if let Some(first_event) = events.next().await {
@@ -346,7 +342,6 @@ pub trait LanguageModel: Send + Sync {
                         let last_token_usage = last_token_usage.clone();
                         let thread_id_value = conversation_id.clone();
 
-
                         async move {
                             match result {
                                 Ok(LanguageModelCompletionEvent::StatusUpdate { .. }) => None,
@@ -365,7 +360,6 @@ pub trait LanguageModel: Send + Sync {
                     }
                 }))
                 .boxed();
-
 
             Ok(LanguageModelTextStream {
                 message_id,

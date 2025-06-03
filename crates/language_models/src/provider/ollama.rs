@@ -454,7 +454,9 @@ impl LanguageModel for OllamaLanguageModel {
         let future = self.request_limiter.stream(async move {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&request_copy, &thread_id).await;
+                handler
+                    .save_completion_req(&request_copy, &thread_id, &checkpoint_id)
+                    .await;
             }
 
             let stream = stream_chat_completion(http_client.as_ref(), &api_url, request).await?;

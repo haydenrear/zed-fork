@@ -81,7 +81,7 @@ create index if not exists  ide_checkpoints_thread_id_idx
                                 )::text
                             ),
                     'UTF8');
-                "#, &thread_id, &thread_id, &json, "standard", &json);
+                "#, &thread_id, &checkpoint_id, &json, "standard", &json);
 
 
 

@@ -389,7 +389,9 @@ impl LanguageModel for MistralLanguageModel {
 
         async move {
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&prev_request, &thread_id).await;
+                handler
+                    .save_completion_req(&prev_request, &thread_id, &checkpoint_id)
+                    .await;
             }
             let stream = stream.await?;
             let mapper = MistralEventMapper::new();
