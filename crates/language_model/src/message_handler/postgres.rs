@@ -1,3 +1,4 @@
+use crate::RequestIds;
 use crate::message_handler::{DatabaseClient, Message};
 use anyhow::Result;
 use chrono::Utc;
@@ -40,15 +41,19 @@ impl PostgresDatabaseClient {
 create table if not exists  ide_checkpoints
 (
     thread_id     text                  not null,
+    prompt_id     text                  not null,
+    session_id    text                  not null,
     checkpoint_ts text default ''::text not null,
     checkpoint_id text                  not null,
     blob          bytea                 not null,
     task_path     text default ''::text not null,
-    primary key (thread_id)
+    primary key (thread_id, checkpoint_id)
 );
 
 create index if not exists  ide_checkpoints_thread_id_idx
     on ide_checkpoints (thread_id);
+create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
+    on ide_checkpoints (thread_id, checkpoint_id);
             "#,
         )
         .execute(pool)
@@ -57,18 +62,20 @@ create index if not exists  ide_checkpoints_thread_id_idx
         .map(|p| Ok(()))?
     }
 
-    fn _parse_sql_query(thread_id: &&String, json: &String, checkpoint_id: &String) -> String {
+    fn _parse_sql_query(ids: &RequestIds, json: &String) -> String {
         let json = json.replace("'", "");
 
         let f = format!(
             r#"
-                INSERT INTO ide_checkpoints (thread_id, checkpoint_ts, checkpoint_id, blob, task_path)
+                INSERT INTO ide_checkpoints (thread_id, prompt_id, session_id, checkpoint_ts, checkpoint_id, blob, task_path)
                 VALUES ('{}',
+                        '{}',
+                        '{}',
                         now(),
                         '{}',
                         convert_to('{}', 'UTF8'),
                         '{}')
-                ON CONFLICT (thread_id)
+                ON CONFLICT (thread_id, checkpoint_id)
                 DO UPDATE
                 SET blob = convert_to(
                         (
@@ -81,7 +88,7 @@ create index if not exists  ide_checkpoints_thread_id_idx
                             ),
                     'UTF8');
                 "#,
-            &thread_id, &checkpoint_id, &json, "standard", &json
+            &ids.thread_id, &ids.prompt_id, &ids.session_id, &ids.checkpoint_id, &json, "standard", &json
         );
 
         log::info!("Here is sql query\n{}", &f);
@@ -91,12 +98,7 @@ create index if not exists  ide_checkpoints_thread_id_idx
 }
 
 impl DatabaseClient for PostgresDatabaseClient {
-    async fn save_append_messages(
-        &self,
-        message: Vec<Message>,
-        thread_id: &str,
-        checkpoint_id: &str,
-    ) {
+    async fn save_append_messages(&self, message: Vec<Message>, ids: &RequestIds) {
         let message_clone = message.clone();
         let pool = self.pool.clone();
 
@@ -105,14 +107,11 @@ impl DatabaseClient for PostgresDatabaseClient {
             return;
         }
 
-        let thread_id = &thread_id.to_string();
-        let checkpoint_id = &checkpoint_id.to_string();
-
         let message_json_res = serde_json::to_string(&message_clone);
 
         if let Ok(json) = &message_json_res {
             let json = message_json_res.unwrap();
-            let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(&thread_id, &json, checkpoint_id))
+            let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(ids, &json))
                 .execute(&*pool.unwrap())
                 .await;
 

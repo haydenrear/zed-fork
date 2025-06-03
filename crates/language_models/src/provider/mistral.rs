@@ -9,7 +9,14 @@ use gpui::{
 };
 use http_client::HttpClient;
 use language_model::message_handler::{AiMessageHandler, peek_db};
-use language_model::{AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role, StopReason, TokenUsage, get_message_handler_async, _retrieve_ids};
+use language_model::{
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent,
+    LanguageModelToolUse, MessageContent, RateLimiter, RequestIds, Role, StopReason, TokenUsage,
+    get_message_handler_async,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
@@ -360,12 +367,11 @@ impl LanguageModel for MistralLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
 
         let prev_request = request.clone();
-        let (thread_id, checkpoint_id) = _retrieve_ids(&prev_request);
+        let ids = _retrieve_ids(&prev_request);
 
         let request = into_mistral(
             request,
@@ -376,17 +382,14 @@ impl LanguageModel for MistralLanguageModel {
 
         async move {
             if let Some(handler) = &message_handler {
-                handler
-                    .save_completion_req(&prev_request, &thread_id, &checkpoint_id)
-                    .await;
+                handler.save_completion_req(&prev_request, &ids).await;
             }
             let stream = stream.await?;
             let mapper = MistralEventMapper::new();
             Ok(peek_db(
                 mapper.map_stream(stream).boxed(),
                 message_handler,
-                thread_id,
-                checkpoint_id,
+                ids
             ))
         }
         .boxed()

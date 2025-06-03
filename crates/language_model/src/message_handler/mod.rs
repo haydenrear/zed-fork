@@ -1,5 +1,7 @@
 mod postgres;
 mod registry;
+
+use crate::RequestIds;
 use futures::{Stream, StreamExt};
 
 use crate::{
@@ -138,12 +140,7 @@ pub enum Message {
 
 /// Interface for database operations
 pub trait DatabaseClient: Send + Sync {
-    async fn save_append_messages(
-        &self,
-        message: Vec<Message>,
-        thread_id: &str,
-        checkpoint_id: &str,
-    );
+    async fn save_append_messages(&self, message: Vec<Message>, ids: &RequestIds);
 }
 
 /// Message handler for interfacing with LangGraph and database storage
@@ -157,22 +154,12 @@ impl MessageHandlerTrait for AiMessageHandler {}
 
 impl Global for AiMessageHandler {}
 
-pub fn peek_db<T>(
-    stream: T,
-    message_handler: Option<Arc<AiMessageHandler>>,
-    thread_id: String,
-    checkpoint_id: String,
-) -> T
+pub fn peek_db<T>(stream: T, message_handler: Option<Arc<AiMessageHandler>>, ids: RequestIds) -> T
 where
     T: Stream<Item = Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
 {
     if let Some(handler) = message_handler {
-        let stream = AiMessageHandler::inspect_stream(
-            stream,
-            handler.clone(),
-            thread_id.clone(),
-            checkpoint_id.clone(),
-        );
+        let stream = AiMessageHandler::inspect_stream(stream, handler.clone(), ids);
         stream
     } else {
         stream
@@ -187,47 +174,44 @@ impl AiMessageHandler {
     pub async fn save_completion_req(
         &self,
         request_message: &LanguageModelRequest,
-        thread_id: &str,
-        checkpoint_id: &str,
+        ids: &RequestIds,
     ) {
         let collected = request_message
             .messages
             .iter()
             .flat_map(|r| {
-                Self::map_from_completion_request(r, thread_id, Some(request_message)).into_iter()
+                Self::map_from_completion_request(r, ids, Some(request_message))
+                    .into_iter()
             })
             .collect::<Vec<Message>>();
-        self.save_append_messages(collected, thread_id, checkpoint_id)
-            .await;
+        let _ = self.save_append_messages(collected, ids).await;
     }
 
     pub async fn save_completion_request(
         &self,
         request_message: &LanguageModelRequestMessage,
-        thread_id: &str,
-        checkpoint_id: &str,
+        ids: &RequestIds,
     ) {
-        if let Some(msg) = Self::map_from_completion_request(request_message, thread_id, None) {
-            self.save_append_messages(vec![msg], thread_id, checkpoint_id)
-                .await;
+        if let Some(msg) =
+            Self::map_from_completion_request(request_message, ids, None)
+        {
+            let _ = self.save_append_messages(vec![msg], ids).await;
         }
     }
 
     pub async fn save_completion_event(
         &self,
         request_message: &LanguageModelCompletionEvent,
-        thread_id: &str,
-        checkpoint_id: &str,
+        ids: &RequestIds,
     ) {
-        if let Some(msg) = Self::map_from_completion_event(request_message, thread_id) {
-            self.save_append_messages(vec![msg], thread_id, checkpoint_id)
-                .await;
+        if let Some(msg) = Self::map_from_completion_event(request_message, &ids.checkpoint_id) {
+            let _ = self.save_append_messages(vec![msg], ids).await;
         }
     }
 
     pub fn map_from_completion_request(
         request_message: &LanguageModelRequestMessage,
-        thread_id: &str,
+        id: &RequestIds,
         metadata: Option<&LanguageModelRequest>,
     ) -> Option<Message> {
         let content = match serde_json::to_string(&request_message.content) {
@@ -238,7 +222,7 @@ impl AiMessageHandler {
             }
         };
         let content_value = ContentValue::new(content);
-        let id = thread_id.to_string();
+        let id = id.thread_id.to_string();
 
         let mut response_metadata = HashMap::new();
         if let Some(meta) = metadata {
@@ -392,38 +376,28 @@ impl AiMessageHandler {
     /// Save a message to the database
     pub async fn save_append_messages(
         &self,
-        message: Vec<Message>,
-        thread_id: &str,
-        checkpoint_id: &str,
-    ) {
-        if let Some(db_client) = &self.database_client {
-            log::debug!("Saving appending...");
-            db_client
-                .save_append_messages(message, thread_id, checkpoint_id)
-                .await;
+        messages: Vec<Message>,
+        ids: &RequestIds,
+    ) -> anyhow::Result<()> {
+        if let Some(ref db_client) = self.database_client {
+            db_client.save_append_messages(messages, ids).await;
         }
+        Ok(())
     }
 
-    pub fn inspect_stream<T>(
-        s: T,
-        handler: Arc<AiMessageHandler>,
-        thread_id_clone: String,
-        checkpoint_id: String,
-    ) -> T
+    pub fn inspect_stream<T>(s: T, handler: Arc<AiMessageHandler>, ids: RequestIds) -> T
     where
         T: Stream<Item = Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
     {
         s.inspect(move |result_ref| {
             let result = result_ref;
             let arc = handler.clone();
-            let thread_id = thread_id_clone.clone();
-            let checkpoint_id = checkpoint_id.clone();
+            let ids = ids.clone();
 
             if let Ok(res) = result {
                 let res = res.clone();
                 smol::spawn(async move {
-                    arc.save_completion_event(&res, &thread_id, &checkpoint_id)
-                        .await;
+                    arc.save_completion_event(&res, &ids).await;
                 })
                 .detach();
             }

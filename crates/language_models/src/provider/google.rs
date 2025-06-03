@@ -12,7 +12,11 @@ use gpui::{
 };
 use http_client::HttpClient;
 use language_model::message_handler::peek_db;
-use language_model::{AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelToolChoice, LanguageModelToolSchemaFormat, LanguageModelToolUse, LanguageModelToolUseId, MessageContent, StopReason, _retrieve_ids};
+use language_model::{
+    _retrieve_ids, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    LanguageModelToolChoice, LanguageModelToolSchemaFormat, LanguageModelToolUse,
+    LanguageModelToolUseId, MessageContent, RequestIds, StopReason,
+};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
@@ -319,7 +323,6 @@ impl GoogleLanguageModel {
         }
         .boxed()
     }
-
 }
 
 impl LanguageModel for GoogleLanguageModel {
@@ -406,8 +409,6 @@ impl LanguageModel for GoogleLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let (thread_id, checkpoint_id) = _retrieve_ids(&request);
-
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
 
@@ -417,17 +418,17 @@ impl LanguageModel for GoogleLanguageModel {
         let request = into_google(request, self.model.id().to_string(), self.model.mode());
         let request = self.stream_completion(request, cx);
         let future = self.request_limiter.stream(async move {
+            let ids = _retrieve_ids(&prev_request);
+
             if let Some(handler) = &message_handler {
-                handler
-                    .save_completion_req(&prev_request, &thread_id, &checkpoint_id)
-                    .await;
+                handler.save_completion_req(&prev_request, &ids).await;
             }
             let response = request
                 .await
                 .map_err(|err| LanguageModelCompletionError::Other(anyhow!(err)))?;
 
             let stream = GoogleEventMapper::new().map_stream(response);
-            let s = peek_db(stream, message_handler, thread_id, checkpoint_id);
+            let s = peek_db(stream, message_handler, ids);
             Ok(s)
         });
         async move { Ok(future.await?.boxed()) }.boxed()

@@ -4,7 +4,11 @@ use futures::{Stream, TryFutureExt, stream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
 use language_model::message_handler::{AiMessageHandler, peek_db};
-use language_model::{AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse, LanguageModelToolUseId, StopReason, get_message_handler_async, _retrieve_ids};
+use language_model::{
+    _retrieve_ids, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse,
+    LanguageModelToolUseId, RequestIds, StopReason, get_message_handler_async,
+};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
@@ -419,16 +423,10 @@ impl LanguageModel for OllamaLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let prompt_id = request
-            .prompt_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
         // Get message handler for saving messages
 
         let request_copy = request.clone();
-
-        let (thread_id, checkpoint_id) = _retrieve_ids(&request);
+        let ids = _retrieve_ids(&request_copy);
 
         let request = self.to_ollama_request(request);
 
@@ -445,9 +443,7 @@ impl LanguageModel for OllamaLanguageModel {
         let future = self.request_limiter.stream(async move {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler
-                    .save_completion_req(&request_copy, &thread_id, &checkpoint_id)
-                    .await;
+                handler.save_completion_req(&request_copy, &ids).await;
             }
 
             let stream = stream_chat_completion(http_client.as_ref(), &api_url, request).await?;
@@ -456,8 +452,7 @@ impl LanguageModel for OllamaLanguageModel {
             Ok(peek_db(
                 stream,
                 message_handler,
-                thread_id.clone(),
-                checkpoint_id.clone(),
+                ids
             )
             .boxed())
         });

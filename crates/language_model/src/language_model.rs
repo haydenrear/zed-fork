@@ -16,7 +16,9 @@ pub use crate::message_handler::{
 use serde_json;
 use std::collections::HashMap;
 
-use crate::message_handler::{AiMessageHandler, MessageHandlerConfig, init_message_handler, peek_db};
+use crate::message_handler::{
+    AiMessageHandler, MessageHandlerConfig, init_message_handler, peek_db,
+};
 pub use crate::model::*;
 pub use crate::rate_limiter::*;
 pub use crate::registry::*;
@@ -56,16 +58,30 @@ pub fn init_settings(cx: &mut App) {
     registry::init(cx);
 }
 
-pub fn _retrieve_ids(request: &LanguageModelRequest) -> (String, String) {
-    let thread_id = request
+#[derive(Debug, Clone)]
+pub struct RequestIds {
+    pub thread_id: String,
+    pub checkpoint_id: String,
+    pub session_id: String,
+    pub prompt_id: String,
+}
+
+pub fn _retrieve_ids(request: &LanguageModelRequest) -> RequestIds {
+    let session_id = request
         .session_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let checkpoint_id = request
-        .thread_id
+    let prompt_id = request
+        .prompt_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    (thread_id, checkpoint_id)
+
+    RequestIds {
+        thread_id: session_id.clone(),
+        checkpoint_id: prompt_id.clone(),
+        session_id,
+        prompt_id,
+    }
 }
 
 /// Configuration for caching language model messages.

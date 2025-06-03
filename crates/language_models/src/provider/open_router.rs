@@ -8,7 +8,14 @@ use gpui::{
 };
 use http_client::HttpClient;
 use language_model::message_handler::{AiMessageHandler, peek_db};
-use language_model::{AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role, StopReason, get_message_handler_async, _retrieve_ids};
+use language_model::{
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent,
+    LanguageModelToolUse, MessageContent, RateLimiter, RequestIds, Role, StopReason, TokenUsage,
+    get_message_handler_async,
+};
 use open_router::{Model, ResponseStreamEvent, list_models, stream_completion};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -366,7 +373,7 @@ impl LanguageModel for OpenRouterLanguageModel {
         >,
     > {
         let original_request = request.clone();
-        let (thread_id, checkpoint_id) = _retrieve_ids(&original_request);
+        let ids = _retrieve_ids(&original_request);
 
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
@@ -376,9 +383,7 @@ impl LanguageModel for OpenRouterLanguageModel {
         async move {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler
-                    .save_completion_req(&original_request, &thread_id, &checkpoint_id)
-                    .await;
+                handler.save_completion_req(&original_request, &ids).await;
             }
 
             let mapper = OpenRouterEventMapper::new();
@@ -387,8 +392,7 @@ impl LanguageModel for OpenRouterLanguageModel {
             Ok(peek_db(
                 stream,
                 message_handler,
-                thread_id.clone(),
-                checkpoint_id.clone(),
+                ids
             )
             .boxed())
         }

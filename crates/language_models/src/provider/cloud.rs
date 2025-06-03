@@ -9,7 +9,14 @@ use gpui::{
     AnyElement, AnyView, App, AsyncApp, Context, Entity, SemanticVersion, Subscription, Task,
 };
 use http_client::{AsyncBody, HttpClient, Method, Response, StatusCode};
-use language_model::{AuthenticateError, LanguageModel, LanguageModelCacheConfiguration, LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestUsage, ZED_CLOUD_PROVIDER_ID, get_message_handler_async, _retrieve_ids};
+use language_model::{
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
+    LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice,
+    LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestIds,
+    RequestUsage, ZED_CLOUD_PROVIDER_ID, get_message_handler_async,
+};
 use language_model::{
     LanguageModelCompletionEvent, LanguageModelProvider, LlmApiToken, PaymentRequiredError,
     RefreshLlmTokenListener,
@@ -811,7 +818,7 @@ impl LanguageModel for CloudLanguageModel {
         let app_version = cx.update(|cx| AppVersion::global(cx)).ok();
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         let original_request = request.clone();
-        let (thread_id, checkpoint_id) = _retrieve_ids(&original_request);
+        let ids = _retrieve_ids(&original_request);
         match self.model.provider {
             zed_llm_client::LanguageModelProvider::Anthropic => {
                 let request = into_anthropic(
@@ -830,15 +837,8 @@ impl LanguageModel for CloudLanguageModel {
                 let client = self.client.clone();
                 let llm_api_token = self.llm_api_token.clone();
                 let future = self.request_limiter.stream(async move {
-                    let thread_id = original_request
-                        .thread_id
-                        .clone()
-                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
                     if let Some(handler) = &message_handler {
-                        handler
-                            .save_completion_req(&original_request, &thread_id, &checkpoint_id)
-                            .await;
+                        handler.save_completion_req(&original_request, &ids).await;
                     }
 
                     let PerformLlmCompletionResponse {
@@ -851,7 +851,7 @@ impl LanguageModel for CloudLanguageModel {
                         llm_api_token,
                         app_version,
                         CompletionBody {
-                            thread_id: Some(thread_id.clone()),
+                            thread_id: Some(ids.thread_id.clone()),
                             prompt_id,
                             intent,
                             mode,
@@ -888,8 +888,7 @@ impl LanguageModel for CloudLanguageModel {
                             move |event| mapper.map_event(event),
                         ),
                         message_handler,
-                        thread_id.clone(),
-                        checkpoint_id.clone(),
+                        ids,
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
@@ -905,10 +904,9 @@ impl LanguageModel for CloudLanguageModel {
                 let llm_api_token = self.llm_api_token.clone();
 
                 let future = self.request_limiter.stream(async move {
+
                     if let Some(handler) = &message_handler {
-                        handler
-                            .save_completion_req(&original_request, &thread_id, &checkpoint_id)
-                            .await;
+                        handler.save_completion_req(&original_request, &ids).await;
                     }
 
                     let PerformLlmCompletionResponse {
@@ -921,7 +919,7 @@ impl LanguageModel for CloudLanguageModel {
                         llm_api_token,
                         app_version,
                         CompletionBody {
-                            thread_id: Some(thread_id.clone()),
+                            thread_id: Some(ids.thread_id.clone()),
                             prompt_id,
                             intent,
                             mode,
@@ -943,8 +941,7 @@ impl LanguageModel for CloudLanguageModel {
                             move |event| mapper.map_event(event),
                         ),
                         message_handler,
-                        thread_id.clone(),
-                        checkpoint_id.clone(),
+                        ids,
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
@@ -993,8 +990,7 @@ impl LanguageModel for CloudLanguageModel {
                             move |event| mapper.map_event(event),
                         ),
                         message_handler,
-                        thread_id.clone(),
-                        checkpoint_id.clone(),
+                        ids,
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()

@@ -15,7 +15,7 @@ use language_model::message_handler::{AiMessageHandler, peek_db};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
-    LanguageModelRequest, RateLimiter, Role,
+    LanguageModelRequest, RateLimiter, RequestIds, Role,
 };
 use lmstudio::{
     ChatCompletionRequest, ChatMessage, ModelType, ResponseStreamEvent, get_models, preload_model,
@@ -434,22 +434,19 @@ impl LanguageModel for LmStudioLanguageModel {
         >,
     > {
         let original_request = request.clone();
-        let (thread_id, checkpoint_id) = _retrieve_ids(&original_request);
+        let ids = _retrieve_ids(&original_request);
         let request = self.to_lmstudio_request(request);
         let completions = self.stream_completion(request, cx);
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         async move {
             if let Some(handler) = &message_handler {
-                handler
-                    .save_completion_req(&original_request, &thread_id, &checkpoint_id)
-                    .await;
+                handler.save_completion_req(&original_request, &ids).await;
             }
             let mapper = LmStudioEventMapper::new();
             Ok(peek_db(
                 mapper.map_stream(completions.await?).boxed(),
                 message_handler,
-                thread_id,
-                checkpoint_id,
+                ids,
             ))
         }
         .boxed()
