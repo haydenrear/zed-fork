@@ -8,14 +8,20 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
-use language_model::{AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, TokenUsage, get_message_handler_async, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role, StopReason, LanguageModelToolChoice};
+use language_model::message_handler::{AiMessageHandler, peek_db};
+use language_model::{
+    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
+    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
+    RateLimiter, Role, StopReason, TokenUsage, get_message_handler_async,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
 use std::str::FromStr;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
-use language_model::message_handler::{peek_db, AiMessageHandler};
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
@@ -360,7 +366,14 @@ impl LanguageModel for MistralLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let thread_id = request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let thread_id = request
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let checkpoint_id = request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
@@ -380,7 +393,12 @@ impl LanguageModel for MistralLanguageModel {
             }
             let stream = stream.await?;
             let mapper = MistralEventMapper::new();
-            Ok(peek_db(mapper.map_stream(stream).boxed(), message_handler, thread_id))
+            Ok(peek_db(
+                mapper.map_stream(stream).boxed(),
+                message_handler,
+                thread_id,
+                checkpoint_id,
+            ))
         }
         .boxed()
     }

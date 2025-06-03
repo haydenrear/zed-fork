@@ -1,3 +1,4 @@
+use crate::{AllLanguageModelSettings, ui::InstructionListItem};
 use anyhow::{Context as _, Result, anyhow};
 use collections::{BTreeMap, HashMap};
 use credentials_provider::CredentialsProvider;
@@ -8,12 +9,13 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, peek_db};
 use language_model::{
     AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, RateLimiter, Role,
-    TokenUsage, get_message_handler_async, LanguageModelToolChoice, LanguageModelToolResultContent,LanguageModelToolUse,
-    MessageContent, StopReason,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
+    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
+    RateLimiter, Role, StopReason, TokenUsage, get_message_handler_async,
 };
 use open_ai::{ImageUrl, Model, ResponseStreamEvent, stream_completion};
 use schemars::JsonSchema;
@@ -27,8 +29,6 @@ use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
 use uuid::uuid;
-use language_model::message_handler::{peek_db, AiMessageHandler};
-use crate::{AllLanguageModelSettings, ui::InstructionListItem};
 
 const PROVIDER_ID: &str = "openai";
 const PROVIDER_NAME: &str = "OpenAI";
@@ -343,7 +343,14 @@ impl LanguageModel for OpenAiLanguageModel {
         >,
     > {
         let original_request = request.clone();
-        let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let thread_id = original_request
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let checkpoint_id = original_request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
@@ -354,13 +361,21 @@ impl LanguageModel for OpenAiLanguageModel {
         let completions = self.stream_completion(request, cx);
         async move {
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &thread_id).await;
+                handler
+                    .save_completion_req(&original_request, &thread_id)
+                    .await;
             }
 
             let mapper = OpenAiEventMapper::new();
             let stream = mapper.map_stream(completions.await?);
 
-            Ok(peek_db(stream, message_handler, thread_id.clone()).boxed())
+            Ok(peek_db(
+                stream,
+                message_handler,
+                thread_id.clone(),
+                checkpoint_id.clone(),
+            )
+            .boxed())
         }
         .boxed()
     }

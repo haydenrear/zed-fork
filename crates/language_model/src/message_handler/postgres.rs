@@ -13,10 +13,7 @@ pub struct PostgresDatabaseClient {
 impl PostgresDatabaseClient {
     /// Creates a new PostgreSQL database client
     pub async fn new(connection_string: &str) -> Result<Self> {
-        println!("Connecting");
-        // tracing::Span::current().record("connection_id", format!("{}", connection_id));
-        //
-        // tracing::info!("connection opened");
+        log::info!("Connecting to postgres.");
 
         let pool = PgPoolOptions::new()
             .max_connections(5)
@@ -25,15 +22,15 @@ impl PostgresDatabaseClient {
             .await?;
 
 
-        println!("Connecting to postgres");
+        log::info!("Connecting to postgres");
 
         // Ensure tables exist
         Self::initialize_schema(&pool).await?;
 
-        println!("Initialized schema.");
+        log::info!("Initialized postgres schema.");
 
         Ok(Self {
-            pool: None,
+            pool: Some(Arc::new(pool)),
         })
     }
 
@@ -61,7 +58,7 @@ create index if not exists  ide_checkpoints_thread_id_idx
         Ok(())
     }
 
-    fn _parse_sql_query(thread_id: &&String, json: &String) -> String {
+    fn _parse_sql_query(thread_id: &&String, json: &String, checkpoint_id: &String) -> String {
 
         let json = json.replace("'", "");
 
@@ -88,14 +85,14 @@ create index if not exists  ide_checkpoints_thread_id_idx
 
 
 
-        println!("Here is sql query\n{}", &f);
+        log::info!("Here is sql query\n{}", &f);
 
         f
     }
 }
 
 impl DatabaseClient for PostgresDatabaseClient {
-    async fn save_append_messages(&self, message: Vec<Message>, thread_id: &str) {
+    async fn save_append_messages(&self, message: Vec<Message>, thread_id: &str, checkpoint_id: &str) {
 
         let message_clone = message.clone();
         let pool = self.pool.clone();
@@ -105,6 +102,7 @@ impl DatabaseClient for PostgresDatabaseClient {
         }
 
         let thread_id = &thread_id.to_string();
+        let checkpoint_id = &checkpoint_id.to_string();
 
         let message_json_res = serde_json::to_string(&message_clone);
         println!("Performing...");
@@ -112,7 +110,7 @@ impl DatabaseClient for PostgresDatabaseClient {
             println!("Performing... is ok...");
             let json = message_json_res.unwrap();
             let sql_res = sqlx::raw_sql(
-                &Self::_parse_sql_query(&thread_id, &json)
+                &Self::_parse_sql_query(&thread_id, &json, checkpoint_id)
             )
             .execute(&*pool.unwrap())
             .await;

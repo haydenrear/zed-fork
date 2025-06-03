@@ -40,6 +40,7 @@ util.workspace = true
 workspace-hack.workspace = true
 zed_llm_client.workspace = true
 uuid = { version = "1.16.0", features = ["v4"] }
+log.workspace = true
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

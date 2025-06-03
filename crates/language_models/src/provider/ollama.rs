@@ -1,15 +1,18 @@
 use anyhow::{Result, anyhow};
-use uuid::uuid;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use futures::{Stream, TryFutureExt, stream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
-use language_model::{get_message_handler_async, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse, LanguageModelToolUseId, StopReason};
+use language_model::message_handler::{AiMessageHandler, peek_db};
 use language_model::{
-    LanguageModel,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    MessageContent, RateLimiter, Role
+    AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse,
+    LanguageModelToolUseId, StopReason, get_message_handler_async,
+};
+use language_model::{
+    LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, MessageContent, RateLimiter, Role,
 };
 use ollama::{
     ChatMessage, ChatOptions, ChatRequest, ChatResponseDelta, KeepAlive, OllamaFunctionTool,
@@ -18,13 +21,13 @@ use ollama::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
+use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{collections::HashMap, sync::Arc};
-use std::ops::Deref;
-use language_model::message_handler::{peek_db, AiMessageHandler};
 use ui::{ButtonLike, Indicator, List, prelude::*};
 use util::ResultExt;
+use uuid::uuid;
 
 use crate::AllLanguageModelSettings;
 use crate::ui::InstructionListItem;
@@ -420,7 +423,18 @@ impl LanguageModel for OllamaLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let prompt_id = request.prompt_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let prompt_id = request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let thread_id = request
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let checkpoint_id = request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Get message handler for saving messages
 
@@ -438,18 +452,21 @@ impl LanguageModel for OllamaLanguageModel {
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
 
         let future = self.request_limiter.stream(async move {
-
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&request_copy, &prompt_id).await;
+                handler.save_completion_req(&request_copy, &thread_id).await;
             }
 
             let stream = stream_chat_completion(http_client.as_ref(), &api_url, request).await?;
             let stream = map_to_language_model_completion_events(stream);
 
-            Ok(peek_db(stream, message_handler, prompt_id.clone())
-                .boxed())
-
+            Ok(peek_db(
+                stream,
+                message_handler,
+                thread_id.clone(),
+                checkpoint_id.clone(),
+            )
+            .boxed())
         });
 
         future.map_ok(|f| f.boxed()).boxed()

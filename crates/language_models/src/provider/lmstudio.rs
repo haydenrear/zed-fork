@@ -4,14 +4,14 @@ use futures::Stream;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
-use language_model::{get_message_handler_async};
+use language_model::get_message_handler_async;
 use language_model::{
     AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
     StopReason,
 };
 
-use uuid::uuid;
+use language_model::message_handler::{AiMessageHandler, peek_db};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
@@ -27,9 +27,9 @@ use settings::{Settings, SettingsStore};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::{collections::BTreeMap, sync::Arc};
-use language_model::message_handler::{peek_db, AiMessageHandler};
 use ui::{ButtonLike, Indicator, List, prelude::*};
 use util::ResultExt;
+use uuid::uuid;
 
 use crate::AllLanguageModelSettings;
 use crate::ui::InstructionListItem;
@@ -433,19 +433,31 @@ impl LanguageModel for LmStudioLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-
         let original_request = request.clone();
-        let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let thread_id = original_request
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let checkpoint_id = original_request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let request = self.to_lmstudio_request(request);
         let completions = self.stream_completion(request, cx);
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         async move {
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &thread_id).await;
+                handler
+                    .save_completion_req(&original_request, &thread_id)
+                    .await;
             }
             let mapper = LmStudioEventMapper::new();
-            Ok(peek_db(mapper.map_stream(completions.await?).boxed(), message_handler,
-                thread_id))
+            Ok(peek_db(
+                mapper.map_stream(completions.await?).boxed(),
+                message_handler,
+                thread_id,
+                checkpoint_id,
+            ))
         }
         .boxed()
     }

@@ -51,7 +51,7 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<
     println!("Initializing connection string");
 
     if cx.has_global::<MessageHandlerRegistry>() {
-        let option = cx.global::<MessageHandlerRegistry>().message_handler.clone();
+        let option = get_message_handler(cx);
         if option.as_ref().is_some() {
             if option.as_ref().unwrap().database_client.as_ref().is_some() {
                 return Task::ready(Ok(()));
@@ -76,9 +76,9 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<
         let out = t.update_global::<MessageHandlerRegistry, Result<()>>(|g, c| {
             g.message_handler = Some(Arc::new(AiMessageHandler::new(Some(Arc::new(db_client)))));
             Ok(())
-        });
+        }).unwrap();
 
-        Ok(())
+        out
     })
 
 }

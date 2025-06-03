@@ -9,18 +9,22 @@ use gpui::{
     WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, peek_db};
 use language_model::{
-    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    StopReason,
+    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
+    LanguageModelToolChoice, RateLimiter, Role, get_message_handler_async,
 };
-use language_model::{get_message_handler_async, AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice, RateLimiter, Role};
+use language_model::{
+    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, StopReason,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
-use language_model::message_handler::{peek_db, AiMessageHandler};
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, prelude::*};
 use util::ResultExt;
@@ -356,14 +360,28 @@ impl LanguageModel for DeepSeekLanguageModel {
 
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         async move {
-            let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let thread_id = original_request
+                .thread_id
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let checkpoint_id = original_request
+                .prompt_id
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &thread_id).await;
+                handler
+                    .save_completion_req(&original_request, &thread_id)
+                    .await;
             }
             let mapper = DeepSeekEventMapper::new();
-            Ok(peek_db(mapper.map_stream(stream.await?).boxed(), message_handler, thread_id))
+            Ok(peek_db(
+                mapper.map_stream(stream.await?).boxed(),
+                message_handler,
+                thread_id,
+                checkpoint_id,
+            ))
         }
         .boxed()
     }

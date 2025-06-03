@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result, anyhow};
 use collections::BTreeMap;
 use credentials_provider::CredentialsProvider;
 use editor::{Editor, EditorElement, EditorStyle};
-use futures::{FutureExt, Stream, StreamExt, future::BoxFuture};
+use futures::{FutureExt, Stream, StreamExt, future::BoxFuture, stream::BoxStream};
 use google_ai::{
     FunctionDeclaration, GenerateContentResponse, GoogleModelMode, Part, SystemInstruction,
     ThinkingConfig, UsageMetadata,
@@ -11,6 +11,7 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::peek_db;
 use language_model::{
     AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelToolChoice, LanguageModelToolSchemaFormat, LanguageModelToolUse,
@@ -30,14 +31,13 @@ use std::sync::{
     atomic::{self, AtomicU64},
 };
 use strum::IntoEnumIterator;
-use language_model::message_handler::{peek_db, AiMessageHandler};
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
 
 use crate::AllLanguageModelSettings;
 use crate::ui::InstructionListItem;
-use uuid::uuid;
+
 const PROVIDER_ID: &str = "google";
 const PROVIDER_NAME: &str = "Google AI";
 
@@ -406,13 +406,17 @@ impl LanguageModel for GoogleLanguageModel {
     ) -> BoxFuture<
         'static,
         Result<
-            futures::stream::BoxStream<
-                'static,
-                Result<LanguageModelCompletionEvent, LanguageModelCompletionError>,
-            >,
+            BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let thread_id = request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let thread_id = request
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let checkpoint_id = request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
@@ -431,7 +435,7 @@ impl LanguageModel for GoogleLanguageModel {
                 .map_err(|err| LanguageModelCompletionError::Other(anyhow!(err)))?;
 
             let stream = GoogleEventMapper::new().map_stream(response);
-            let s = peek_db(stream, message_handler, thread_id);
+            let s = peek_db(stream, message_handler, thread_id, checkpoint_id);
             Ok(s)
         });
         async move { Ok(future.await?.boxed()) }.boxed()

@@ -1,6 +1,5 @@
 use anthropic::{AnthropicModelMode, parse_prompt_too_long};
 use anyhow::{Context as _, Result, anyhow};
-use uuid::uuid;
 use client::{Client, UserStore, zed_urls};
 use futures::{
     AsyncBufReadExt, FutureExt, Stream, StreamExt, future::BoxFuture, stream::BoxStream,
@@ -10,7 +9,14 @@ use gpui::{
     AnyElement, AnyView, App, AsyncApp, Context, Entity, SemanticVersion, Subscription, Task,
 };
 use http_client::{AsyncBody, HttpClient, Method, Response, StatusCode};
-use language_model::{get_message_handler_async, AuthenticateError, LanguageModel, LanguageModelCacheConfiguration, LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestUsage, ZED_CLOUD_PROVIDER_ID};
+use language_model::{
+    AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
+    LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice,
+    LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestUsage,
+    ZED_CLOUD_PROVIDER_ID, get_message_handler_async,
+};
 use language_model::{
     LanguageModelCompletionEvent, LanguageModelProvider, LlmApiToken, PaymentRequiredError,
     RefreshLlmTokenListener,
@@ -29,6 +35,7 @@ use std::time::Duration;
 use thiserror::Error;
 use ui::{TintColor, prelude::*};
 use util::{ResultExt as _, maybe};
+use uuid::uuid;
 use zed_llm_client::{
     CLIENT_SUPPORTS_STATUS_MESSAGES_HEADER_NAME, CURRENT_PLAN_HEADER_NAME, CompletionBody,
     CompletionRequestStatus, CountTokensBody, CountTokensResponse, EXPIRED_LLM_TOKEN_HEADER_NAME,
@@ -37,11 +44,11 @@ use zed_llm_client::{
     TOOL_USE_LIMIT_REACHED_HEADER_NAME, ZED_VERSION_HEADER_NAME,
 };
 
-use language_model::message_handler::{peek_db, AiMessageHandler};
 use crate::AllLanguageModelSettings;
 use crate::provider::anthropic::{AnthropicEventMapper, count_anthropic_tokens, into_anthropic};
 use crate::provider::google::{GoogleEventMapper, into_google};
 use crate::provider::open_ai::{OpenAiEventMapper, count_open_ai_tokens, into_open_ai};
+use language_model::message_handler::{AiMessageHandler, peek_db};
 
 pub const PROVIDER_NAME: &str = "Zed";
 
@@ -807,6 +814,10 @@ impl LanguageModel for CloudLanguageModel {
     > {
         let thread_id = request.thread_id.clone();
         let prompt_id = request.prompt_id.clone();
+        let checkpoint_id = request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let intent = request.intent;
         let mode = request.mode;
         let app_version = cx.update(|cx| AppVersion::global(cx)).ok();
@@ -830,10 +841,15 @@ impl LanguageModel for CloudLanguageModel {
                 let client = self.client.clone();
                 let llm_api_token = self.llm_api_token.clone();
                 let future = self.request_limiter.stream(async move {
-                    let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                    let thread_id = original_request
+                        .thread_id
+                        .clone()
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
                     if let Some(handler) = &message_handler {
-                        handler.save_completion_req(&original_request, &thread_id).await;
+                        handler
+                            .save_completion_req(&original_request, &thread_id)
+                            .await;
                     }
 
                     let PerformLlmCompletionResponse {
@@ -873,17 +889,19 @@ impl LanguageModel for CloudLanguageModel {
                     })?;
 
                     let mut mapper = AnthropicEventMapper::new();
-                    Ok(peek_db(map_cloud_completion_events(
-                        Box::pin(
-
+                    Ok(peek_db(
+                        map_cloud_completion_events(
+                            Box::pin(
                                 response_lines(response, includes_status_messages)
                                     .chain(usage_updated_event(usage))
                                     .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
                             ),
-                        move |event| mapper.map_event(event)),
-
-                               message_handler,
-                               thread_id.clone()))
+                            move |event| mapper.map_event(event),
+                        ),
+                        message_handler,
+                        thread_id.clone(),
+                        checkpoint_id.clone(),
+                    ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
             }
@@ -896,11 +914,16 @@ impl LanguageModel for CloudLanguageModel {
                 };
                 let request = into_open_ai(request, &model, model.max_output_tokens());
                 let llm_api_token = self.llm_api_token.clone();
-                let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                let thread_id = original_request
+                    .thread_id
+                    .clone()
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
                 let future = self.request_limiter.stream(async move {
                     if let Some(handler) = &message_handler {
-                        handler.save_completion_req(&original_request, &thread_id).await;
+                        handler
+                            .save_completion_req(&original_request, &thread_id)
+                            .await;
                     }
 
                     let PerformLlmCompletionResponse {
@@ -925,17 +948,19 @@ impl LanguageModel for CloudLanguageModel {
                     .await?;
 
                     let mut mapper = OpenAiEventMapper::new();
-                    Ok(peek_db(map_cloud_completion_events(
-                        Box::pin(
-
-                            response_lines(response, includes_status_messages)
-                                .chain(usage_updated_event(usage))
-                                .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                    Ok(peek_db(
+                        map_cloud_completion_events(
+                            Box::pin(
+                                response_lines(response, includes_status_messages)
+                                    .chain(usage_updated_event(usage))
+                                    .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                            ),
+                            move |event| mapper.map_event(event),
                         ),
-                        move |event| mapper.map_event(event)),
-
-                               message_handler,
-                               thread_id.clone()))
+                        message_handler,
+                        thread_id.clone(),
+                        checkpoint_id.clone(),
+                    ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
             }
@@ -946,7 +971,10 @@ impl LanguageModel for CloudLanguageModel {
                 let request =
                     into_google(request, self.model.id.to_string(), GoogleModelMode::Default);
                 let llm_api_token = self.llm_api_token.clone();
-                let thread_id = original_request.thread_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                let thread_id = original_request
+                    .thread_id
+                    .clone()
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
                 let future = self.request_limiter.stream(async move {
                     let PerformLlmCompletionResponse {
                         response,
@@ -970,17 +998,19 @@ impl LanguageModel for CloudLanguageModel {
                     .await?;
 
                     let mut mapper = GoogleEventMapper::new();
-                    Ok(peek_db(map_cloud_completion_events(
-                        Box::pin(
-
-                            response_lines(response, includes_status_messages)
-                                .chain(usage_updated_event(usage))
-                                .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                    Ok(peek_db(
+                        map_cloud_completion_events(
+                            Box::pin(
+                                response_lines(response, includes_status_messages)
+                                    .chain(usage_updated_event(usage))
+                                    .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                            ),
+                            move |event| mapper.map_event(event),
                         ),
-                        move |event| mapper.map_event(event)),
-
-                               message_handler,
-                               thread_id.clone()))
+                        message_handler,
+                        thread_id.clone(),
+                        checkpoint_id.clone(),
+                    ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
             }

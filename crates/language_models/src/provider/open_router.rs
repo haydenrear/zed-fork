@@ -7,12 +7,13 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, peek_db};
 use language_model::{
     AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
     LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
     LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason,
+    RateLimiter, Role, StopReason, get_message_handler_async,
 };
 use open_router::{Model, ResponseStreamEvent, list_models, stream_completion};
 use schemars::JsonSchema;
@@ -370,11 +371,39 @@ impl LanguageModel for OpenRouterLanguageModel {
             >,
         >,
     > {
+        let original_request = request.clone();
+        let thread_id = original_request
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let checkpoint_id = original_request
+            .prompt_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
         let request = into_open_router(request, &self.model, self.max_output_tokens());
         let completions = self.stream_completion(request, cx);
         async move {
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(&original_request, &thread_id)
+                    .await;
+            }
+
             let mapper = OpenRouterEventMapper::new();
-            Ok(mapper.map_stream(completions.await?).boxed())
+            let stream = mapper.map_stream(completions.await?);
+
+            Ok(peek_db(
+                stream,
+                message_handler,
+                thread_id.clone(),
+                checkpoint_id.clone(),
+            )
+            .boxed())
         }
         .boxed()
     }
