@@ -18,14 +18,7 @@ use gpui::{
     Transformation, percentage, svg,
 };
 use language_model::message_handler::{AiMessageHandler, peek_db};
-use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelRequestMessage, LanguageModelToolChoice, LanguageModelToolResultContent,
-    LanguageModelToolSchemaFormat, LanguageModelToolUse, MessageContent, RateLimiter, Role,
-    StopReason, get_message_handler_async,
-};
+use language_model::{AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelRequestMessage, LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolSchemaFormat, LanguageModelToolUse, MessageContent, RateLimiter, Role, StopReason, get_message_handler_async, _retrieve_ids};
 use settings::SettingsStore;
 use std::time::Duration;
 use strum::IntoEnumIterator;
@@ -283,14 +276,7 @@ impl LanguageModel for CopilotChatLanguageModel {
 
         let request_limiter = self.request_limiter.clone();
         let future = cx.spawn(async move |cx| {
-            let thread_id = original_request
-                .thread_id
-                .clone()
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let checkpoint_id = original_request
-                .prompt_id
-                .clone()
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let (thread_id, checkpoint_id) = _retrieve_ids(&original_request);
             let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
 
             // Save request messages if handler is available

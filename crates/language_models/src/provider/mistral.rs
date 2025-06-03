@@ -9,13 +9,7 @@ use gpui::{
 };
 use http_client::HttpClient;
 use language_model::message_handler::{AiMessageHandler, peek_db};
-use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason, TokenUsage, get_message_handler_async,
-};
+use language_model::{AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role, StopReason, TokenUsage, get_message_handler_async, _retrieve_ids};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
@@ -366,19 +360,12 @@ impl LanguageModel for MistralLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let thread_id = request
-            .thread_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let checkpoint_id = request
-            .prompt_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
 
         let prev_request = request.clone();
+        let (thread_id, checkpoint_id) = _retrieve_ids(&prev_request);
 
         let request = into_mistral(
             request,
@@ -820,6 +807,11 @@ mod tests {
     #[test]
     fn test_into_mistral_conversion() {
         let request = language_model::LanguageModelRequest {
+            thread_id: None,
+            prompt_id: None,
+            session_id: None,
+            intent: None,
+            mode: None,
             messages: vec![
                 language_model::LanguageModelRequestMessage {
                     role: language_model::Role::System,
@@ -839,10 +831,6 @@ mod tests {
             temperature: Some(0.7),
             tools: Vec::new(),
             tool_choice: None,
-            thread_id: None,
-            prompt_id: None,
-            intent: None,
-            mode: None,
             stop: Vec::new(),
         };
 

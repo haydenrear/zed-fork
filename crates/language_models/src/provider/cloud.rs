@@ -9,14 +9,7 @@ use gpui::{
     AnyElement, AnyView, App, AsyncApp, Context, Entity, SemanticVersion, Subscription, Task,
 };
 use http_client::{AsyncBody, HttpClient, Method, Response, StatusCode};
-use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
-    LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
-    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
-    LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestUsage,
-    ZED_CLOUD_PROVIDER_ID, get_message_handler_async,
-};
+use language_model::{AuthenticateError, LanguageModel, LanguageModelCacheConfiguration, LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestUsage, ZED_CLOUD_PROVIDER_ID, get_message_handler_async, _retrieve_ids};
 use language_model::{
     LanguageModelCompletionEvent, LanguageModelProvider, LlmApiToken, PaymentRequiredError,
     RefreshLlmTokenListener,
@@ -812,19 +805,15 @@ impl LanguageModel for CloudLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let thread_id = request.thread_id.clone();
-        let prompt_id = request.prompt_id.clone();
-        let checkpoint_id = request
-            .prompt_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let prompt_id = request.session_id.clone();
         let intent = request.intent;
         let mode = request.mode;
         let app_version = cx.update(|cx| AppVersion::global(cx)).ok();
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        let original_request = request.clone();
+        let (thread_id, checkpoint_id) = _retrieve_ids(&original_request);
         match self.model.provider {
             zed_llm_client::LanguageModelProvider::Anthropic => {
-                let original_request = request.clone();
                 let request = into_anthropic(
                     request,
                     self.model.id.to_string(),
@@ -914,10 +903,6 @@ impl LanguageModel for CloudLanguageModel {
                 };
                 let request = into_open_ai(request, &model, model.max_output_tokens());
                 let llm_api_token = self.llm_api_token.clone();
-                let thread_id = original_request
-                    .thread_id
-                    .clone()
-                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
                 let future = self.request_limiter.stream(async move {
                     if let Some(handler) = &message_handler {

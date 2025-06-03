@@ -291,8 +291,9 @@ impl TerminalInlineAssistant {
             LanguageModelRequest {
                 thread_id: None,
                 prompt_id: None,
-                mode: None,
+                session_id: None,
                 intent: Some(CompletionIntent::TerminalInlineAssist),
+                mode: None,
                 messages: vec![request_message],
                 tools: Vec::new(),
                 tool_choice: None,

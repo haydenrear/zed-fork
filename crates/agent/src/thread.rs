@@ -37,6 +37,7 @@ use settings::Settings;
 use thiserror::Error;
 use ui::Window;
 use util::{ResultExt as _, post_inc};
+use uuid;
 use uuid::Uuid;
 use zed_llm_client::{CompletionIntent, CompletionRequestStatus};
 
@@ -324,6 +325,7 @@ pub enum QueueState {
 /// A thread of conversation with the LLM.
 pub struct Thread {
     id: ThreadId,
+    session_id: String,
     updated_at: DateTime<Utc>,
     summary: ThreadSummary,
     pending_summary: Task<Option<()>>,
@@ -410,6 +412,7 @@ impl Thread {
 
         Self {
             id: ThreadId::new(),
+            session_id: uuid::Uuid::new_v4().to_string(),
             updated_at: Utc::now(),
             summary: ThreadSummary::Pending,
             pending_summary: Task::ready(None),
@@ -498,6 +501,7 @@ impl Thread {
 
         Self {
             id,
+            session_id: uuid::Uuid::new_v4().to_string(),
             updated_at: serialized.updated_at,
             summary: ThreadSummary::Ready(serialized.summary),
             pending_summary: Task::ready(None),
@@ -583,6 +587,10 @@ impl Thread {
 
     pub fn id(&self) -> &ThreadId {
         &self.id
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1229,6 +1237,7 @@ impl Thread {
         let mut request = LanguageModelRequest {
             thread_id: Some(self.id.to_string()),
             prompt_id: Some(self.last_prompt_id.to_string()),
+            session_id: Some(self.session_id.clone()),
             intent: Some(intent),
             mode: None,
             messages: vec![],
@@ -1390,6 +1399,7 @@ impl Thread {
         let mut request = LanguageModelRequest {
             thread_id: None,
             prompt_id: None,
+            session_id: Some(self.session_id.clone()),
             intent: Some(intent),
             mode: None,
             messages: vec![],

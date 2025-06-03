@@ -12,11 +12,7 @@ use gpui::{
 };
 use http_client::HttpClient;
 use language_model::message_handler::peek_db;
-use language_model::{
-    AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelToolChoice, LanguageModelToolSchemaFormat, LanguageModelToolUse,
-    LanguageModelToolUseId, MessageContent, StopReason,
-};
+use language_model::{AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelToolChoice, LanguageModelToolSchemaFormat, LanguageModelToolUse, LanguageModelToolUseId, MessageContent, StopReason, _retrieve_ids};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
@@ -323,6 +319,7 @@ impl GoogleLanguageModel {
         }
         .boxed()
     }
+
 }
 
 impl LanguageModel for GoogleLanguageModel {
@@ -409,14 +406,7 @@ impl LanguageModel for GoogleLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let thread_id = request
-            .thread_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let checkpoint_id = request
-            .prompt_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let (thread_id, checkpoint_id) = _retrieve_ids(&request);
 
         // Get message handler for saving messages
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();

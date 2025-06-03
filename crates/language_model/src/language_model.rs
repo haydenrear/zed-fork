@@ -56,6 +56,19 @@ pub fn init_settings(cx: &mut App) {
     registry::init(cx);
 }
 
+pub fn _retrieve_ids(request: &LanguageModelRequest) -> (String, String) {
+    let thread_id = request
+        .session_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let checkpoint_id = request
+        .thread_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    (thread_id, checkpoint_id)
+}
+
+
 /// Configuration for caching language model messages.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct LanguageModelCacheConfiguration {
@@ -271,6 +284,7 @@ pub trait LanguageModel: Send + Sync {
         cx: &App,
     ) -> BoxFuture<'static, Result<usize>>;
 
+
     fn stream_completion(
         &self,
         request: LanguageModelRequest,
@@ -290,8 +304,7 @@ pub trait LanguageModel: Send + Sync {
         // Clone relevant data from the request before moving into the async block
         println!("Streaming completion text!");
         let thread_id = request.thread_id.clone();
-
-        let thread_id_value = request.thread_id.clone().unwrap_or("parent".to_string());
+        let session_id = request.session_id.clone();
         let messages = request.clone();
 
         // Get the message handler before async work to avoid thread safety issues
@@ -300,8 +313,11 @@ pub trait LanguageModel: Send + Sync {
         let future = self.stream_completion(request, cx);
 
         async move {
-            // Generate a conversation ID if we need one
-            let conversation_id = thread_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            // Use session_id first, then thread_id, then generate new UUID as fallback
+            let conversation_id = session_id.or_else(|| thread_id).unwrap_or_else(|| {
+                log::warn!("No session_id or thread_id provided, generating new conversation ID");
+                uuid::Uuid::new_v4().to_string()
+            });
 
             let events = future.await?;
             let mut events = events.fuse();
@@ -332,15 +348,24 @@ pub trait LanguageModel: Send + Sync {
                 }
             }
 
-            // let events = AiMessageHandler::inspect_stream(events, message_handler.unwrap(), conversation_id.clone());
+            // Use conversation_id for database operations if message handler is available
+            let events = if let Some(handler) = message_handler.as_ref() {
+                AiMessageHandler::inspect_stream(
+                    events,
+                    handler.clone(),
+                    conversation_id.clone(),
+                    conversation_id.clone(),
+                )
+            } else {
+                events
+            };
+
             let stream = futures::stream::iter(first_item_text.map(Ok))
                 .chain(events.filter_map({
                     let last_token_usage = last_token_usage.clone();
-                    let conversation_id = conversation_id.clone();
 
                     move |result| {
                         let last_token_usage = last_token_usage.clone();
-                        let thread_id_value = conversation_id.clone();
 
                         async move {
                             match result {

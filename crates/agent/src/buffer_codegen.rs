@@ -465,6 +465,7 @@ impl CodegenAlternative {
             LanguageModelRequest {
                 thread_id: None,
                 prompt_id: None,
+                session_id: None,
                 intent: Some(CompletionIntent::InlineAssist),
                 mode: None,
                 tools: Vec::new(),

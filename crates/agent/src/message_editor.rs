@@ -1348,10 +1348,12 @@ impl MessageEditor {
         cx.emit(MessageEditorEvent::Changed);
         self.update_token_count_task.take();
 
-        let Some(model) = self.thread.read(cx).configured_model() else {
+        let thread_data = self.thread.read(cx);
+        let Some(model) = thread_data.configured_model() else {
             self.last_estimated_token_count.take();
             return;
         };
+        let session_id = thread_data.session_id().to_string();
 
         let editor = self.editor.clone();
 
@@ -1395,6 +1397,7 @@ impl MessageEditor {
                     let request = language_model::LanguageModelRequest {
                         thread_id: None,
                         prompt_id: None,
+                        session_id: Some(session_id),
                         intent: None,
                         mode: None,
                         messages: vec![request_message],

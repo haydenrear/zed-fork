@@ -4,7 +4,7 @@ use futures::Stream;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
-use language_model::get_message_handler_async;
+use language_model::{_retrieve_ids, get_message_handler_async};
 use language_model::{
     AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
@@ -434,14 +434,7 @@ impl LanguageModel for LmStudioLanguageModel {
         >,
     > {
         let original_request = request.clone();
-        let thread_id = original_request
-            .thread_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let checkpoint_id = original_request
-            .prompt_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let (thread_id, checkpoint_id) = _retrieve_ids(&original_request);
         let request = self.to_lmstudio_request(request);
         let completions = self.stream_completion(request, cx);
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();

@@ -559,6 +559,7 @@ impl SummaryIndex {
         let request = LanguageModelRequest {
             thread_id: None,
             prompt_id: None,
+            session_id: None,
             mode: None,
             intent: None,
             messages: vec![LanguageModelRequestMessage {

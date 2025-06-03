@@ -32,14 +32,7 @@ use gpui::{
 use gpui_tokio::Tokio;
 use http_client::HttpClient;
 use language_model::message_handler::{AiMessageHandler, peek_db};
-use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
-    LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName,
-    LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
-    LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role,
-    TokenUsage, get_message_handler_async,
-};
+use language_model::{AuthenticateError, LanguageModel, LanguageModelCacheConfiguration, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role, TokenUsage, get_message_handler_async, _retrieve_ids};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -571,14 +564,7 @@ impl LanguageModel for BedrockModel {
         let request_future = self.stream_completion(request, cx);
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         let future = self.request_limiter.stream(async move {
-            let thread_id = original_request
-                .thread_id
-                .clone()
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let checkpoint_id = original_request
-                .prompt_id
-                .clone()
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let (thread_id, checkpoint_id) = _retrieve_ids(&original_request);
 
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {

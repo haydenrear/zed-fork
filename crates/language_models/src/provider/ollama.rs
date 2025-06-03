@@ -4,11 +4,7 @@ use futures::{Stream, TryFutureExt, stream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
 use language_model::message_handler::{AiMessageHandler, peek_db};
-use language_model::{
-    AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse,
-    LanguageModelToolUseId, StopReason, get_message_handler_async,
-};
+use language_model::{AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse, LanguageModelToolUseId, StopReason, get_message_handler_async, _retrieve_ids};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
@@ -427,18 +423,13 @@ impl LanguageModel for OllamaLanguageModel {
             .prompt_id
             .clone()
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let thread_id = request
-            .thread_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let checkpoint_id = request
-            .prompt_id
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Get message handler for saving messages
 
         let request_copy = request.clone();
+
+        let (thread_id, checkpoint_id) = _retrieve_ids(&request);
+
         let request = self.to_ollama_request(request);
 
         let http_client = self.http_client.clone();
