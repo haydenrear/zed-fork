@@ -74,9 +74,11 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<
         log::info!("Postgres Connection initializing");
         let db_client = PostgresDatabaseClient::new(&connection_string).await?;
         let out = t.update_global::<MessageHandlerRegistry, Result<()>>(|g, c| {
-            g.message_handler = Some(Arc::new(AiMessageHandler::new(Some(Arc::new(db_client)))));
-            Ok(())
-        }).unwrap();
+                g.message_handler = Some(Arc::new(AiMessageHandler::new(Some(Arc::new(db_client)))));
+                Ok(())
+            })
+            .inspect_err(|e| log::error!("Found err when initializing message handler: {}", e))
+            .unwrap();
 
         out
     })
