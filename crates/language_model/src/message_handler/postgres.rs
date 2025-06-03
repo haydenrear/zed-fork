@@ -21,12 +21,12 @@ impl PostgresDatabaseClient {
             .connect(connection_string)
             .await?;
 
-        log::info!("Connecting to postgres");
+        log::info!("Connected to postgres... initializing schema");
 
         // Ensure tables exist
         Self::initialize_schema(&pool).await?;
 
-        log::info!("Initialized postgres schema.");
+        log::info!("Initialized schema.");
 
         Ok(Self {
             pool: Some(Arc::new(pool)),
@@ -52,9 +52,9 @@ create index if not exists  ide_checkpoints_thread_id_idx
             "#,
         )
         .execute(pool)
-        .await?;
-
-        Ok(())
+        .await
+        .inspect_err(|e| log::error!("Found error initializing schema: {}", e))
+        .map(|p| Ok(()))?
     }
 
     fn _parse_sql_query(thread_id: &&String, json: &String, checkpoint_id: &String) -> String {

@@ -11,7 +11,7 @@ pub mod message_handler;
 pub mod fake_provider;
 
 pub use crate::message_handler::{
-    Message, MessageContent as AiMessageContent, MessageType, get_message_handler_async,
+    Message as AiMessageContent, MessageType, get_message_handler_async,
 };
 use serde_json;
 use std::collections::HashMap;
