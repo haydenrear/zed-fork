@@ -78,7 +78,7 @@ pub fn _retrieve_ids(request: &LanguageModelRequest) -> RequestIds {
 
     RequestIds {
         thread_id: session_id.clone(),
-        checkpoint_id: prompt_id.clone(),
+        checkpoint_id: uuid::Uuid::new_v4().to_string(),
         session_id,
         prompt_id,
     }
