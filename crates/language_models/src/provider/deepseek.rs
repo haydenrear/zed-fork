@@ -9,7 +9,7 @@ use gpui::{
     WhiteSpace,
 };
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
     LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
@@ -366,7 +366,13 @@ impl LanguageModel for DeepSeekLanguageModel {
 
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &ids, LanguageModelArgs(id.clone())).await;
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
             }
 
             let mapper = DeepSeekEventMapper::new();
@@ -374,8 +380,7 @@ impl LanguageModel for DeepSeekLanguageModel {
                 mapper.map_stream(stream.await?).boxed(),
                 message_handler,
                 ids,
-                &original_request,
-                LanguageModelArgs(id)
+                LanguageModelArgs::from_request(id, &original_request),
             ))
         }
         .boxed()

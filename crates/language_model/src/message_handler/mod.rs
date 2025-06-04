@@ -155,15 +155,48 @@ impl MessageHandlerTrait for AiMessageHandler {}
 impl Global for AiMessageHandler {}
 
 #[derive(Clone)]
-pub struct LanguageModelArgs(pub LanguageModelId);
+pub struct LanguageModelArgs {
+    pub model_id: LanguageModelId,
+    pub temperature: Option<f32>,
+    pub intent: Option<String>,
+    pub mode: Option<String>,
+    pub prompt_id: Option<String>,
+}
 
-pub fn peek_db<T>(stream: T, message_handler: Option<Arc<AiMessageHandler>>, ids: RequestIds,
-                  language_model_request: &LanguageModelRequest, language_id: LanguageModelArgs) -> T
+impl LanguageModelArgs {
+    pub fn new(model_id: LanguageModelId) -> Self {
+        Self {
+            model_id,
+            temperature: None,
+            intent: None,
+            mode: None,
+            prompt_id: None,
+        }
+    }
+
+    pub fn from_request(model_id: LanguageModelId, request: &LanguageModelRequest) -> Self {
+        Self {
+            model_id,
+            temperature: request.temperature,
+            intent: request.intent.as_ref().map(|i| format!("{:?}", i)),
+            mode: request.mode.as_ref().map(|m| format!("{:?}", m)),
+            prompt_id: request.prompt_id.clone(),
+        }
+    }
+}
+
+pub fn peek_db<T>(
+    stream: T,
+    message_handler: Option<Arc<AiMessageHandler>>,
+    ids: RequestIds,
+    language_model_args: LanguageModelArgs,
+) -> T
 where
     T: Stream<Item = Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
 {
     if let Some(handler) = message_handler {
-        let stream = AiMessageHandler::inspect_stream(stream, handler.clone(), ids, language_model_request, language_id);
+        let stream =
+            AiMessageHandler::inspect_stream(stream, handler.clone(), ids, language_model_args);
         stream
     } else {
         stream
@@ -179,13 +212,13 @@ impl AiMessageHandler {
         &self,
         request_message: &LanguageModelRequest,
         ids: &RequestIds,
-        language_model_args: LanguageModelArgs
+        language_model_args: LanguageModelArgs,
     ) {
         let collected = request_message
             .messages
             .iter()
             .flat_map(|r| {
-                Self::map_from_completion_request(r, ids, Some(request_message), &language_model_args).into_iter()
+                Self::map_from_completion_request(r, ids, &language_model_args).into_iter()
             })
             .collect::<Vec<Message>>();
         let _ = self.save_append_messages(collected, ids).await;
@@ -195,51 +228,47 @@ impl AiMessageHandler {
         &self,
         request_message: &LanguageModelCompletionEvent,
         ids: &RequestIds,
-        language_model_request: &LanguageModelRequest,
-        language_model_args: &LanguageModelArgs
+        language_model_args: &LanguageModelArgs,
     ) {
-        if let Some(msg) =
-            Self::map_from_completion_event(request_message, &ids.checkpoint_id, Some(language_model_request), language_model_args)
-        {
+        if let Some(msg) = Self::map_from_completion_event(
+            request_message,
+            &ids.checkpoint_id,
+            language_model_args,
+        ) {
             let _ = self.save_append_messages(vec![msg], ids).await;
         }
     }
 
     fn build_response_metadata(
-        metadata: Option<&LanguageModelRequest>,
-        language_model_args: &LanguageModelArgs
+        language_model_args: &LanguageModelArgs,
     ) -> HashMap<String, serde_json::Value> {
         let mut response_metadata = HashMap::new();
 
         response_metadata.insert(
             "model_id".to_string(),
-            serde_json::Value::from(format!("{:?}", language_model_args.0.0.to_string())));
+            serde_json::Value::from(format!("{:?}", language_model_args.model_id.0.to_string())),
+        );
 
-        if let Some(meta) = metadata {
-            if let Some(temperature) = meta.temperature {
-                response_metadata.insert(
-                    "temperature".to_string(),
-                    serde_json::Value::from(temperature),
-                );
-            }
-            if let Some(intent) = &meta.intent {
-                response_metadata.insert(
-                    "intent".to_string(),
-                    serde_json::Value::from(format!("{:?}", intent)),
-                );
-            }
-            if let Some(mode) = &meta.mode {
-                response_metadata.insert(
-                    "mode".to_string(),
-                    serde_json::Value::from(format!("{:?}", mode)),
-                );
-            }
-            if let Some(prompt_id) = &meta.prompt_id {
-                response_metadata.insert(
-                    "prompt_id".to_string(),
-                    serde_json::Value::from(prompt_id.clone()),
-                );
-            }
+        if let Some(temperature) = language_model_args.temperature {
+            response_metadata.insert(
+                "temperature".to_string(),
+                serde_json::Value::from(temperature),
+            );
+        }
+        if let Some(intent) = &language_model_args.intent {
+            response_metadata.insert(
+                "intent".to_string(),
+                serde_json::Value::from(intent.clone()),
+            );
+        }
+        if let Some(mode) = &language_model_args.mode {
+            response_metadata.insert("mode".to_string(), serde_json::Value::from(mode.clone()));
+        }
+        if let Some(prompt_id) = &language_model_args.prompt_id {
+            response_metadata.insert(
+                "prompt_id".to_string(),
+                serde_json::Value::from(prompt_id.clone()),
+            );
         }
         response_metadata
     }
@@ -247,8 +276,7 @@ impl AiMessageHandler {
     pub fn map_from_completion_request(
         request_message: &LanguageModelRequestMessage,
         id: &RequestIds,
-        metadata: Option<&LanguageModelRequest>,
-        language_model_args: &LanguageModelArgs
+        language_model_args: &LanguageModelArgs,
     ) -> Option<Message> {
         let content = match serde_json::to_string(&request_message.content) {
             Ok(content) => content,
@@ -260,7 +288,7 @@ impl AiMessageHandler {
         let content_value = ContentValue::new(content);
         let id = id.thread_id.to_string();
 
-        let response_metadata = Self::build_response_metadata(metadata, language_model_args);
+        let response_metadata = Self::build_response_metadata(language_model_args);
 
         match &request_message.role {
             Role::User => Some(Message::Human {
@@ -295,11 +323,9 @@ impl AiMessageHandler {
     pub fn map_from_completion_event(
         request_message: &LanguageModelCompletionEvent,
         thread_id: &str,
-        metadata: Option<&LanguageModelRequest>,
         language_model_args: &LanguageModelArgs,
     ) -> Option<Message> {
-
-        let response_metadata = Self::build_response_metadata(metadata, &language_model_args);
+        let response_metadata = Self::build_response_metadata(&language_model_args);
         match request_message {
             LanguageModelCompletionEvent::StatusUpdate { .. } => None,
             LanguageModelCompletionEvent::StartMessage { .. } => None,
@@ -329,7 +355,6 @@ impl AiMessageHandler {
                         serde_json::Value::String(sig.clone()),
                     );
                 }
-
 
                 Some(Message::Ai {
                     content: ContentValue::new(text.clone()),
@@ -400,8 +425,12 @@ impl AiMessageHandler {
         Ok(())
     }
 
-    pub fn inspect_stream<T>(s: T, handler: Arc<AiMessageHandler>, ids: RequestIds,
-                            language_model_request: &LanguageModelRequest, language_id: LanguageModelArgs) -> T
+    pub fn inspect_stream<T>(
+        s: T,
+        handler: Arc<AiMessageHandler>,
+        ids: RequestIds,
+        language_model_args: LanguageModelArgs,
+    ) -> T
     where
         T: Stream<Item = Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
     {
@@ -409,13 +438,13 @@ impl AiMessageHandler {
             let result = result_ref;
             let arc = handler.clone();
             let ids = ids.clone();
-            let language_id = language_id.clone();
-            let language_model_request = language_model_request.clone();
+            let language_model_args = language_model_args.clone();
 
             if let Ok(res) = result {
                 let res = res.clone();
                 smol::spawn(async move {
-                    arc.save_completion_event(&res, &ids, &language_model_request, &language_id).await;
+                    arc.save_completion_event(&res, &ids, &language_model_args)
+                        .await;
                 })
                 .detach();
             }

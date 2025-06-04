@@ -3,7 +3,7 @@ use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use futures::{Stream, TryFutureExt, stream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse,
@@ -444,7 +444,13 @@ impl LanguageModel for OllamaLanguageModel {
         let future = self.request_limiter.stream(async move {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&request_copy, &ids, LanguageModelArgs(id.clone())).await;
+                handler
+                    .save_completion_req(
+                        &request_copy,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &request_copy),
+                    )
+                    .await;
             }
 
             let stream = stream_chat_completion(http_client.as_ref(), &api_url, request).await?;
@@ -454,8 +460,7 @@ impl LanguageModel for OllamaLanguageModel {
                 stream,
                 message_handler,
                 ids,
-                &request_copy,
-                LanguageModelArgs(id)
+                LanguageModelArgs::from_request(id, &request_copy),
             )
             .boxed())
         });

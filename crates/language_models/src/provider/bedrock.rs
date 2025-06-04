@@ -31,7 +31,7 @@ use gpui::{
 };
 use gpui_tokio::Tokio;
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
     LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName,
@@ -576,14 +576,25 @@ impl LanguageModel for BedrockModel {
 
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &ids, LanguageModelArgs(id.clone())).await;
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
             }
 
             let response = request_future.map_err(|err| anyhow!(err))?.await;
             let mapped_stream = map_to_language_model_completion_events(response, owned_handle);
 
-            Ok(peek_db(mapped_stream, message_handler.clone(), ids, &original_request,
-                       LanguageModelArgs(id)).boxed())
+            Ok(peek_db(
+                mapped_stream,
+                message_handler.clone(),
+                ids,
+                LanguageModelArgs::from_request(id, &original_request),
+            )
+            .boxed())
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }
