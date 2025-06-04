@@ -71,6 +71,10 @@ pub fn _retrieve_ids(request: &LanguageModelRequest) -> RequestIds {
         .session_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let thread_id = request
+        .thread_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let prompt_id = request
         .prompt_id
         .clone()
@@ -79,7 +83,7 @@ pub fn _retrieve_ids(request: &LanguageModelRequest) -> RequestIds {
     RequestIds {
         thread_id: session_id.clone(),
         checkpoint_id: uuid::Uuid::new_v4().to_string(),
-        session_id,
+        session_id: thread_id,
         prompt_id,
     }
 }
