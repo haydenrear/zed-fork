@@ -1,19 +1,19 @@
 mod postgres;
 mod registry;
 
-use crate::RequestIds;
+use crate::{LanguageModelId, RequestIds};
 use futures::{Stream, StreamExt};
 
 use crate::{
     LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelRequest,
     LanguageModelRequestMessage, Role,
 };
+use enum_fields::EnumFields;
 use gpui::Global;
+pub use postgres::PostgresDatabaseClient;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use enum_fields::EnumFields;
-pub use postgres::PostgresDatabaseClient;
 // pub use example::run_message_handler_example;
 pub use registry::{
     MessageHandlerConfig, MessageHandlerRegistry, create_conversation_id, get_message_handler,
@@ -154,12 +154,16 @@ impl MessageHandlerTrait for AiMessageHandler {}
 
 impl Global for AiMessageHandler {}
 
-pub fn peek_db<T>(stream: T, message_handler: Option<Arc<AiMessageHandler>>, ids: RequestIds) -> T
+#[derive(Clone)]
+pub struct LanguageModelArgs(pub LanguageModelId);
+
+pub fn peek_db<T>(stream: T, message_handler: Option<Arc<AiMessageHandler>>, ids: RequestIds,
+                  language_model_request: &LanguageModelRequest, language_id: LanguageModelArgs) -> T
 where
     T: Stream<Item = Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
 {
     if let Some(handler) = message_handler {
-        let stream = AiMessageHandler::inspect_stream(stream, handler.clone(), ids);
+        let stream = AiMessageHandler::inspect_stream(stream, handler.clone(), ids, language_model_request, language_id);
         stream
     } else {
         stream
@@ -175,56 +179,42 @@ impl AiMessageHandler {
         &self,
         request_message: &LanguageModelRequest,
         ids: &RequestIds,
+        language_model_args: LanguageModelArgs
     ) {
         let collected = request_message
             .messages
             .iter()
             .flat_map(|r| {
-                Self::map_from_completion_request(r, ids, Some(request_message))
-                    .into_iter()
+                Self::map_from_completion_request(r, ids, Some(request_message), &language_model_args).into_iter()
             })
             .collect::<Vec<Message>>();
         let _ = self.save_append_messages(collected, ids).await;
-    }
-
-    pub async fn save_completion_request(
-        &self,
-        request_message: &LanguageModelRequestMessage,
-        ids: &RequestIds,
-    ) {
-        if let Some(msg) =
-            Self::map_from_completion_request(request_message, ids, None)
-        {
-            let _ = self.save_append_messages(vec![msg], ids).await;
-        }
     }
 
     pub async fn save_completion_event(
         &self,
         request_message: &LanguageModelCompletionEvent,
         ids: &RequestIds,
+        language_model_request: &LanguageModelRequest,
+        language_model_args: &LanguageModelArgs
     ) {
-        if let Some(msg) = Self::map_from_completion_event(request_message, &ids.checkpoint_id) {
+        if let Some(msg) =
+            Self::map_from_completion_event(request_message, &ids.checkpoint_id, Some(language_model_request), language_model_args)
+        {
             let _ = self.save_append_messages(vec![msg], ids).await;
         }
     }
 
-    pub fn map_from_completion_request(
-        request_message: &LanguageModelRequestMessage,
-        id: &RequestIds,
+    fn build_response_metadata(
         metadata: Option<&LanguageModelRequest>,
-    ) -> Option<Message> {
-        let content = match serde_json::to_string(&request_message.content) {
-            Ok(content) => content,
-            Err(e) => {
-                log::error!("Failed to serialize request message content: {}", e);
-                String::default()
-            }
-        };
-        let content_value = ContentValue::new(content);
-        let id = id.thread_id.to_string();
-
+        language_model_args: &LanguageModelArgs
+    ) -> HashMap<String, serde_json::Value> {
         let mut response_metadata = HashMap::new();
+
+        response_metadata.insert(
+            "model_id".to_string(),
+            serde_json::Value::from(format!("{:?}", language_model_args.0.0.to_string())));
+
         if let Some(meta) = metadata {
             if let Some(temperature) = meta.temperature {
                 response_metadata.insert(
@@ -251,6 +241,26 @@ impl AiMessageHandler {
                 );
             }
         }
+        response_metadata
+    }
+
+    pub fn map_from_completion_request(
+        request_message: &LanguageModelRequestMessage,
+        id: &RequestIds,
+        metadata: Option<&LanguageModelRequest>,
+        language_model_args: &LanguageModelArgs
+    ) -> Option<Message> {
+        let content = match serde_json::to_string(&request_message.content) {
+            Ok(content) => content,
+            Err(e) => {
+                log::error!("Failed to serialize request message content: {}", e);
+                String::default()
+            }
+        };
+        let content_value = ContentValue::new(content);
+        let id = id.thread_id.to_string();
+
+        let response_metadata = Self::build_response_metadata(metadata, language_model_args);
 
         match &request_message.role {
             Role::User => Some(Message::Human {
@@ -285,7 +295,11 @@ impl AiMessageHandler {
     pub fn map_from_completion_event(
         request_message: &LanguageModelCompletionEvent,
         thread_id: &str,
+        metadata: Option<&LanguageModelRequest>,
+        language_model_args: &LanguageModelArgs,
     ) -> Option<Message> {
+
+        let response_metadata = Self::build_response_metadata(metadata, &language_model_args);
         match request_message {
             LanguageModelCompletionEvent::StatusUpdate { .. } => None,
             LanguageModelCompletionEvent::StartMessage { .. } => None,
@@ -299,7 +313,7 @@ impl AiMessageHandler {
                     invalid_tool_calls: None,
                     tool_calls: None,
                     additional_kwargs: HashMap::new(),
-                    response_metadata: HashMap::new(),
+                    response_metadata,
                 })
             }
             LanguageModelCompletionEvent::Thinking { text, signature } => {
@@ -316,6 +330,7 @@ impl AiMessageHandler {
                     );
                 }
 
+
                 Some(Message::Ai {
                     content: ContentValue::new(text.clone()),
                     id,
@@ -324,7 +339,7 @@ impl AiMessageHandler {
                     invalid_tool_calls: None,
                     tool_calls: None,
                     additional_kwargs,
-                    response_metadata: HashMap::new(),
+                    response_metadata,
                 })
             }
             LanguageModelCompletionEvent::Stop(_) => {
@@ -337,7 +352,7 @@ impl AiMessageHandler {
                     invalid_tool_calls: None,
                     tool_calls: None,
                     additional_kwargs: HashMap::new(),
-                    response_metadata: HashMap::new(),
+                    response_metadata,
                 })
             }
             LanguageModelCompletionEvent::ToolUse(tool_use) => {
@@ -366,7 +381,7 @@ impl AiMessageHandler {
                     tool_call_id: Some(tool_use.id.to_string()),
                     tool_name: Some(tool_use.name.as_ref().to_string()),
                     additional_kwargs,
-                    response_metadata: HashMap::new(),
+                    response_metadata,
                 })
             }
             LanguageModelCompletionEvent::UsageUpdate(_token_usage) => None,
@@ -385,7 +400,8 @@ impl AiMessageHandler {
         Ok(())
     }
 
-    pub fn inspect_stream<T>(s: T, handler: Arc<AiMessageHandler>, ids: RequestIds) -> T
+    pub fn inspect_stream<T>(s: T, handler: Arc<AiMessageHandler>, ids: RequestIds,
+                            language_model_request: &LanguageModelRequest, language_id: LanguageModelArgs) -> T
     where
         T: Stream<Item = Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
     {
@@ -393,11 +409,13 @@ impl AiMessageHandler {
             let result = result_ref;
             let arc = handler.clone();
             let ids = ids.clone();
+            let language_id = language_id.clone();
+            let language_model_request = language_model_request.clone();
 
             if let Ok(res) = result {
                 let res = res.clone();
                 smol::spawn(async move {
-                    arc.save_completion_event(&res, &ids).await;
+                    arc.save_completion_event(&res, &ids, &language_model_request, &language_id).await;
                 })
                 .detach();
             }

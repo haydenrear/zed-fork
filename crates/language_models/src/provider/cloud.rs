@@ -48,7 +48,7 @@ use crate::AllLanguageModelSettings;
 use crate::provider::anthropic::{AnthropicEventMapper, count_anthropic_tokens, into_anthropic};
 use crate::provider::google::{GoogleEventMapper, into_google};
 use crate::provider::open_ai::{OpenAiEventMapper, count_open_ai_tokens, into_open_ai};
-use language_model::message_handler::{AiMessageHandler, peek_db};
+use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
 
 pub const PROVIDER_NAME: &str = "Zed";
 
@@ -819,6 +819,8 @@ impl LanguageModel for CloudLanguageModel {
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
         let original_request = request.clone();
         let ids = _retrieve_ids(&original_request);
+        let id = self.id.clone();
+
         match self.model.provider {
             zed_llm_client::LanguageModelProvider::Anthropic => {
                 let request = into_anthropic(
@@ -838,7 +840,7 @@ impl LanguageModel for CloudLanguageModel {
                 let llm_api_token = self.llm_api_token.clone();
                 let future = self.request_limiter.stream(async move {
                     if let Some(handler) = &message_handler {
-                        handler.save_completion_req(&original_request, &ids).await;
+                        handler.save_completion_req(&original_request, &ids, LanguageModelArgs(id.clone())).await;
                     }
 
                     let PerformLlmCompletionResponse {
@@ -889,6 +891,8 @@ impl LanguageModel for CloudLanguageModel {
                         ),
                         message_handler,
                         ids,
+                        &original_request,
+                        LanguageModelArgs(id)
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
@@ -906,7 +910,7 @@ impl LanguageModel for CloudLanguageModel {
                 let future = self.request_limiter.stream(async move {
 
                     if let Some(handler) = &message_handler {
-                        handler.save_completion_req(&original_request, &ids).await;
+                        handler.save_completion_req(&original_request, &ids, LanguageModelArgs(id.clone())).await;
                     }
 
                     let PerformLlmCompletionResponse {
@@ -942,6 +946,8 @@ impl LanguageModel for CloudLanguageModel {
                         ),
                         message_handler,
                         ids,
+                        &original_request,
+                        LanguageModelArgs(id)
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
@@ -991,6 +997,8 @@ impl LanguageModel for CloudLanguageModel {
                         ),
                         message_handler,
                         ids,
+                        &original_request,
+                        LanguageModelArgs(id)
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()

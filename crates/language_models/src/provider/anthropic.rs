@@ -15,7 +15,7 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, peek_db};
+use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
     LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
@@ -494,10 +494,11 @@ impl LanguageModel for AnthropicModel {
             self.model.mode(),
         );
         let request = self.stream_completion(request, cx);
+        let id = self.id.clone();
         let future = self.request_limiter.stream(async move {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&request_to_save, &ids).await;
+                handler.save_completion_req(&request_to_save, &ids, LanguageModelArgs(id.clone())).await;
             }
 
             let response = request
@@ -510,7 +511,8 @@ impl LanguageModel for AnthropicModel {
             let mapper = AnthropicEventMapper::new();
             let stream = mapper.map_stream(response);
 
-            Ok(peek_db(stream, message_handler, ids).boxed())
+            Ok(peek_db(stream, message_handler, ids, &request_to_save,
+                       LanguageModelArgs(id)).boxed())
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

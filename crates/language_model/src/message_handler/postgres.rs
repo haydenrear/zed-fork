@@ -96,7 +96,16 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
         f
     }
 
-    fn _parse_task_path<'a>(task_paths: Vec<String>) -> &'a str {
+    fn _parse_task_path<'a>(message: &Vec<Message>) -> &'a str {
+        let task_paths = message.iter()
+            .flat_map(|f| {
+                f.response_metadata().get("intent").cloned().into_iter()
+                    .flat_map(|j| j.as_str()
+                        .map(|s| s.to_string())
+                        .into_iter())
+            })
+            .collect::<Vec<String>>();
+
         let mut task_path = "standard";
 
         if task_paths.iter().all(|t| t.eq("ThreadSummarization")) {
@@ -128,14 +137,8 @@ impl DatabaseClient for PostgresDatabaseClient {
             return;
         }
 
-        let task_paths = message.iter()
-            .flat_map(|f| {
-                f.response_metadata().get("intent").cloned().into_iter()
-                    .map(|j| j.to_string())
-            })
-            .collect::<Vec<String>>();
 
-        let task_path = Self::_parse_task_path(task_paths);
+        let task_path = Self::_parse_task_path(&message);
 
         let message_json_res = serde_json::to_string(&message_clone);
 
@@ -151,4 +154,28 @@ impl DatabaseClient for PostgresDatabaseClient {
             log::error!("Found err: {}", &e);
         }
     }
+}
+
+#[cfg(test)]
+mod test_db_client {
+    use std::collections::HashMap;
+    use crate::{AiMessageContent, MessageContent};
+    use crate::message_handler::{ContentValue, Message, PostgresDatabaseClient};
+
+    #[test]
+    fn test_append_messages() {
+        let parsed = PostgresDatabaseClient::_parse_task_path(&vec![Message::Ai {
+            content: ContentValue::Single("hello".to_string()),
+            id: "".to_string(),
+            name: None,
+            example: false,
+            invalid_tool_calls: None,
+            tool_calls: None,
+            additional_kwargs: Default::default(),
+            response_metadata: [("intent".to_string(), serde_json::Value::String("ThreadSummarization".to_string()))].into_iter().collect::<HashMap<String, serde_json::Value>>(),
+        }]);
+
+        assert_eq!(parsed, "summarization");
+    }
+
 }

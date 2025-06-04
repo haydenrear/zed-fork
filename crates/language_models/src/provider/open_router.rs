@@ -7,7 +7,7 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, peek_db};
+use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
     LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
@@ -380,10 +380,11 @@ impl LanguageModel for OpenRouterLanguageModel {
 
         let request = into_open_router(request, &self.model, self.max_output_tokens());
         let completions = self.stream_completion(request, cx);
+        let id = self.id.clone();
         async move {
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &ids).await;
+                handler.save_completion_req(&original_request, &ids, LanguageModelArgs(id.clone())).await;
             }
 
             let mapper = OpenRouterEventMapper::new();
@@ -392,7 +393,9 @@ impl LanguageModel for OpenRouterLanguageModel {
             Ok(peek_db(
                 stream,
                 message_handler,
-                ids
+                ids,
+                &original_request,
+                LanguageModelArgs(id)
             )
             .boxed())
         }

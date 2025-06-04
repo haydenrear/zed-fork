@@ -11,7 +11,7 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
-use language_model::message_handler::peek_db;
+use language_model::message_handler::{peek_db, LanguageModelArgs};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelToolChoice, LanguageModelToolSchemaFormat, LanguageModelToolUse,
@@ -417,18 +417,20 @@ impl LanguageModel for GoogleLanguageModel {
 
         let request = into_google(request, self.model.id().to_string(), self.model.mode());
         let request = self.stream_completion(request, cx);
+        let id = self.id.clone();
         let future = self.request_limiter.stream(async move {
             let ids = _retrieve_ids(&prev_request);
 
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&prev_request, &ids).await;
+                handler.save_completion_req(&prev_request, &ids, LanguageModelArgs(id.clone())).await;
             }
             let response = request
                 .await
                 .map_err(|err| LanguageModelCompletionError::Other(anyhow!(err)))?;
 
             let stream = GoogleEventMapper::new().map_stream(response);
-            let s = peek_db(stream, message_handler, ids);
+            let s = peek_db(stream, message_handler, ids, &prev_request,
+                            LanguageModelArgs(id));
             Ok(s)
         });
         async move { Ok(future.await?.boxed()) }.boxed()

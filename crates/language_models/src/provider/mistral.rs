@@ -8,7 +8,7 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, peek_db};
+use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
     LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
@@ -380,16 +380,19 @@ impl LanguageModel for MistralLanguageModel {
         );
         let stream = self.stream_completion(request, cx);
 
+        let id = self.id.clone();
         async move {
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&prev_request, &ids).await;
+                handler.save_completion_req(&prev_request, &ids, LanguageModelArgs(id.clone())).await;
             }
             let stream = stream.await?;
             let mapper = MistralEventMapper::new();
             Ok(peek_db(
                 mapper.map_stream(stream).boxed(),
                 message_handler,
-                ids
+                ids,
+                &prev_request,
+                LanguageModelArgs(id)
             ))
         }
         .boxed()

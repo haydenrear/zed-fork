@@ -11,7 +11,7 @@ use language_model::{
     StopReason,
 };
 
-use language_model::message_handler::{AiMessageHandler, peek_db};
+use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
@@ -438,15 +438,18 @@ impl LanguageModel for LmStudioLanguageModel {
         let request = self.to_lmstudio_request(request);
         let completions = self.stream_completion(request, cx);
         let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        let id = self.id.clone();
         async move {
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &ids).await;
+                handler.save_completion_req(&original_request, &ids, LanguageModelArgs(id.clone())).await;
             }
             let mapper = LmStudioEventMapper::new();
             Ok(peek_db(
                 mapper.map_stream(completions.await?).boxed(),
                 message_handler,
                 ids,
+                &original_request,
+                LanguageModelArgs(id)
             ))
         }
         .boxed()

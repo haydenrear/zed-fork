@@ -17,7 +17,7 @@ use gpui::{
     Action, Animation, AnimationExt, AnyView, App, AsyncApp, Entity, Render, Subscription, Task,
     Transformation, percentage, svg,
 };
-use language_model::message_handler::{AiMessageHandler, peek_db};
+use language_model::message_handler::{AiMessageHandler, peek_db, LanguageModelArgs};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
     LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
@@ -280,6 +280,7 @@ impl LanguageModel for CopilotChatLanguageModel {
             Err(err) => return futures::future::ready(Err(err)).boxed(),
         };
         let is_streaming = copilot_request.stream;
+        let id = self.model.id().to_string();
 
         let request_limiter = self.request_limiter.clone();
         let future = cx.spawn(async move |cx| {
@@ -288,7 +289,7 @@ impl LanguageModel for CopilotChatLanguageModel {
 
             // Save request messages if handler is available
             if let Some(handler) = &message_handler {
-                handler.save_completion_req(&original_request, &ids).await;
+                handler.save_completion_req(&original_request, &ids, LanguageModelArgs(LanguageModelId::from(id.clone()))).await;
             }
 
             let request = CopilotChat::stream_completion(copilot_request, cx.clone());
@@ -297,7 +298,8 @@ impl LanguageModel for CopilotChatLanguageModel {
                     let response = request.await?;
                     let mapped_stream =
                         map_to_language_model_completion_events(response, is_streaming);
-                    Ok(peek_db(mapped_stream, message_handler, ids).boxed())
+                    Ok(peek_db(mapped_stream, message_handler, ids, &original_request,
+                               LanguageModelArgs(LanguageModelId::from(id))).boxed())
                 })
                 .await
         });
