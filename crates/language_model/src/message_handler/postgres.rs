@@ -95,6 +95,27 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
 
         f
     }
+
+    fn _parse_task_path<'a>(task_paths: Vec<String>) -> &'a str {
+        let mut task_path = "standard";
+
+        if task_paths.iter().all(|t| t.eq("ThreadSummarization")) {
+            task_path = "summarization";
+        }
+
+        if task_paths.iter().all(|t| t.eq("ThreadContextSummarization")) {
+            task_path = "context_summarization";
+        }
+
+        if !task_path.eq("summarization") && task_paths.iter().any(|t| t.eq("ThreadSummarization")) {
+            log::error!("Found strange situation where not all were ThreadSummarization")
+        }
+
+        if !task_path.eq("context_summarization") && task_paths.iter().any(|t| t.eq("ThreadContextSummarization")) {
+            log::error!("Found strange situation where not all were ThreadContextSummarization")
+        }
+        task_path
+    }
 }
 
 impl DatabaseClient for PostgresDatabaseClient {
@@ -114,17 +135,12 @@ impl DatabaseClient for PostgresDatabaseClient {
             })
             .collect::<Vec<String>>();
 
-        let mut task_path = "standard";
-
-        if task_paths.iter().all(|t| t.eq("ThreadSummarization")) {
-            task_path = "summarization";
-        }
+        let task_path = Self::_parse_task_path(task_paths);
 
         let message_json_res = serde_json::to_string(&message_clone);
 
         if let Ok(json) = &message_json_res {
-            let json = message_json_res.unwrap();
-            let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(ids, &json, task_path))
+            let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(ids, json, task_path))
                 .execute(&*pool.unwrap())
                 .await;
 
