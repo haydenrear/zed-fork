@@ -10,12 +10,12 @@ use gpui::{
 };
 use http_client::{AsyncBody, HttpClient, Method, Response, StatusCode};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
     LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
     LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestUsage,
-    ZED_CLOUD_PROVIDER_ID,
+    LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestIds,
+    RequestUsage, ZED_CLOUD_PROVIDER_ID, get_message_handler_async,
 };
 use language_model::{
     LanguageModelCompletionEvent, LanguageModelProvider, LlmApiToken, PaymentRequiredError,
@@ -35,6 +35,7 @@ use std::time::Duration;
 use thiserror::Error;
 use ui::{TintColor, prelude::*};
 use util::{ResultExt as _, maybe};
+use uuid::uuid;
 use zed_llm_client::{
     CLIENT_SUPPORTS_STATUS_MESSAGES_HEADER_NAME, CURRENT_PLAN_HEADER_NAME, CompletionBody,
     CompletionRequestStatus, CountTokensBody, CountTokensResponse, EXPIRED_LLM_TOKEN_HEADER_NAME,
@@ -43,9 +44,11 @@ use zed_llm_client::{
     TOOL_USE_LIMIT_REACHED_HEADER_NAME, ZED_VERSION_HEADER_NAME,
 };
 
+use crate::AllLanguageModelSettings;
 use crate::provider::anthropic::{AnthropicEventMapper, count_anthropic_tokens, into_anthropic};
 use crate::provider::google::{GoogleEventMapper, into_google};
 use crate::provider::open_ai::{OpenAiEventMapper, count_open_ai_tokens, into_open_ai};
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 
 pub const PROVIDER_NAME: &str = "Zed";
 
@@ -809,11 +812,15 @@ impl LanguageModel for CloudLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
-        let thread_id = request.thread_id.clone();
-        let prompt_id = request.prompt_id.clone();
+        let prompt_id = request.session_id.clone();
         let intent = request.intent;
         let mode = request.mode;
         let app_version = cx.update(|cx| AppVersion::global(cx)).ok();
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        let original_request = request.clone();
+        let ids = _retrieve_ids(&original_request);
+        let id = self.id.clone();
+
         match self.model.provider {
             zed_llm_client::LanguageModelProvider::Anthropic => {
                 let request = into_anthropic(
@@ -832,6 +839,16 @@ impl LanguageModel for CloudLanguageModel {
                 let client = self.client.clone();
                 let llm_api_token = self.llm_api_token.clone();
                 let future = self.request_limiter.stream(async move {
+                    if let Some(handler) = &message_handler {
+                        handler
+                            .save_completion_req(
+                                &original_request,
+                                &ids,
+                                LanguageModelArgs::from_request(id.clone(), &original_request),
+                            )
+                            .await;
+                    }
+
                     let PerformLlmCompletionResponse {
                         response,
                         usage,
@@ -842,7 +859,7 @@ impl LanguageModel for CloudLanguageModel {
                         llm_api_token,
                         app_version,
                         CompletionBody {
-                            thread_id,
+                            thread_id: Some(ids.thread_id.clone()),
                             prompt_id,
                             intent,
                             mode,
@@ -869,26 +886,43 @@ impl LanguageModel for CloudLanguageModel {
                     })?;
 
                     let mut mapper = AnthropicEventMapper::new();
-                    Ok(map_cloud_completion_events(
-                        Box::pin(
-                            response_lines(response, includes_status_messages)
-                                .chain(usage_updated_event(usage))
-                                .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                    Ok(peek_db(
+                        map_cloud_completion_events(
+                            Box::pin(
+                                response_lines(response, includes_status_messages)
+                                    .chain(usage_updated_event(usage))
+                                    .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                            ),
+                            move |event| mapper.map_event(event),
                         ),
-                        move |event| mapper.map_event(event),
+                        message_handler,
+                        ids,
+                        LanguageModelArgs::from_request(id, &original_request),
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
             }
             zed_llm_client::LanguageModelProvider::OpenAi => {
                 let client = self.client.clone();
+                let original_request = request.clone();
                 let model = match open_ai::Model::from_id(&self.model.id.0) {
                     Ok(model) => model,
                     Err(err) => return async move { Err(anyhow!(err)) }.boxed(),
                 };
-                let request = into_open_ai(request, &model, None);
+                let request = into_open_ai(request, &model, model.max_output_tokens());
                 let llm_api_token = self.llm_api_token.clone();
+
                 let future = self.request_limiter.stream(async move {
+                    if let Some(handler) = &message_handler {
+                        handler
+                            .save_completion_req(
+                                &original_request,
+                                &ids,
+                                LanguageModelArgs::from_request(id.clone(), &original_request),
+                            )
+                            .await;
+                    }
+
                     let PerformLlmCompletionResponse {
                         response,
                         usage,
@@ -899,7 +933,7 @@ impl LanguageModel for CloudLanguageModel {
                         llm_api_token,
                         app_version,
                         CompletionBody {
-                            thread_id,
+                            thread_id: Some(ids.thread_id.clone()),
                             prompt_id,
                             intent,
                             mode,
@@ -911,22 +945,33 @@ impl LanguageModel for CloudLanguageModel {
                     .await?;
 
                     let mut mapper = OpenAiEventMapper::new();
-                    Ok(map_cloud_completion_events(
-                        Box::pin(
-                            response_lines(response, includes_status_messages)
-                                .chain(usage_updated_event(usage))
-                                .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                    Ok(peek_db(
+                        map_cloud_completion_events(
+                            Box::pin(
+                                response_lines(response, includes_status_messages)
+                                    .chain(usage_updated_event(usage))
+                                    .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                            ),
+                            move |event| mapper.map_event(event),
                         ),
-                        move |event| mapper.map_event(event),
+                        message_handler,
+                        ids,
+                        LanguageModelArgs::from_request(id, &original_request),
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
             }
             zed_llm_client::LanguageModelProvider::Google => {
                 let client = self.client.clone();
+
+                let original_request = request.clone();
                 let request =
                     into_google(request, self.model.id.to_string(), GoogleModelMode::Default);
                 let llm_api_token = self.llm_api_token.clone();
+                let thread_id = original_request
+                    .thread_id
+                    .clone()
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
                 let future = self.request_limiter.stream(async move {
                     let PerformLlmCompletionResponse {
                         response,
@@ -938,7 +983,7 @@ impl LanguageModel for CloudLanguageModel {
                         llm_api_token,
                         app_version,
                         CompletionBody {
-                            thread_id,
+                            thread_id: Some(thread_id.clone()),
                             prompt_id,
                             intent,
                             mode,
@@ -950,13 +995,18 @@ impl LanguageModel for CloudLanguageModel {
                     .await?;
 
                     let mut mapper = GoogleEventMapper::new();
-                    Ok(map_cloud_completion_events(
-                        Box::pin(
-                            response_lines(response, includes_status_messages)
-                                .chain(usage_updated_event(usage))
-                                .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                    Ok(peek_db(
+                        map_cloud_completion_events(
+                            Box::pin(
+                                response_lines(response, includes_status_messages)
+                                    .chain(usage_updated_event(usage))
+                                    .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
+                            ),
+                            move |event| mapper.map_event(event),
                         ),
-                        move |event| mapper.map_event(event),
+                        message_handler,
+                        ids,
+                        LanguageModelArgs::from_request(id, &original_request),
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()

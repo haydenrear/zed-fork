@@ -17,22 +17,25 @@ use gpui::{
     Action, Animation, AnimationExt, AnyView, App, AsyncApp, Entity, Render, Subscription, Task,
     Transformation, percentage, svg,
 };
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelRequestMessage, LanguageModelToolChoice, LanguageModelToolResultContent,
-    LanguageModelToolSchemaFormat, LanguageModelToolUse, MessageContent, RateLimiter, Role,
-    StopReason,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelRequestMessage, LanguageModelToolChoice,
+    LanguageModelToolResultContent, LanguageModelToolSchemaFormat, LanguageModelToolUse,
+    MessageContent, RateLimiter, RequestIds, Role, StopReason, get_message_handler_async,
 };
 use settings::SettingsStore;
 use std::time::Duration;
+use strum::IntoEnumIterator;
 use ui::prelude::*;
 use util::debug_panic;
 
 use super::anthropic::count_anthropic_tokens;
 use super::google::count_google_tokens;
 use super::open_ai::count_open_ai_tokens;
+use uuid::uuid;
 
 const PROVIDER_ID: &str = "copilot_chat";
 const PROVIDER_NAME: &str = "GitHub Copilot Chat";
@@ -271,22 +274,49 @@ impl LanguageModel for CopilotChatLanguageModel {
             }
         }
 
+        let original_request = request.clone();
         let copilot_request = match into_copilot_chat(&self.model, request) {
             Ok(request) => request,
             Err(err) => return futures::future::ready(Err(err)).boxed(),
         };
         let is_streaming = copilot_request.stream;
+        let id = self.model.id().to_string();
 
         let request_limiter = self.request_limiter.clone();
         let future = cx.spawn(async move |cx| {
+            let ids = _retrieve_ids(&original_request);
+            let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(
+                            LanguageModelId::from(id.clone()),
+                            &original_request,
+                        ),
+                    )
+                    .await;
+            }
+
             let request = CopilotChat::stream_completion(copilot_request, cx.clone());
             request_limiter
                 .stream(async move {
                     let response = request.await?;
-                    Ok(map_to_language_model_completion_events(
-                        response,
-                        is_streaming,
-                    ))
+                    let mapped_stream =
+                        map_to_language_model_completion_events(response, is_streaming);
+                    Ok(peek_db(
+                        mapped_stream,
+                        message_handler,
+                        ids,
+                        LanguageModelArgs::from_request(
+                            LanguageModelId::from(id),
+                            &original_request,
+                        ),
+                    )
+                    .boxed())
                 })
                 .await
         });

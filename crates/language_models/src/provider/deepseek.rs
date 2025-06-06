@@ -9,12 +9,16 @@ use gpui::{
     WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, RateLimiter, RequestIds, Role,
+    get_message_handler_async,
+};
+use language_model::{
+    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, StopReason,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -27,6 +31,7 @@ use ui::{Icon, IconName, List, prelude::*};
 use util::ResultExt;
 
 use crate::{AllLanguageModelSettings, ui::InstructionListItem};
+use uuid::uuid;
 
 const PROVIDER_ID: &str = "deepseek";
 const PROVIDER_NAME: &str = "DeepSeek";
@@ -350,12 +355,33 @@ impl LanguageModel for DeepSeekLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
+        let original_request = request.clone();
         let request = into_deepseek(request, &self.model, self.max_output_tokens());
         let stream = self.stream_completion(request, cx);
 
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        let id = self.id.clone();
         async move {
+            let ids = _retrieve_ids(&original_request);
+
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
+            }
+
             let mapper = DeepSeekEventMapper::new();
-            Ok(mapper.map_stream(stream.await?).boxed())
+            Ok(peek_db(
+                mapper.map_stream(stream.await?).boxed(),
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &original_request),
+            ))
         }
         .boxed()
     }

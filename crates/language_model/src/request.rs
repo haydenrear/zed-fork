@@ -384,6 +384,7 @@ pub enum LanguageModelToolChoice {
 pub struct LanguageModelRequest {
     pub thread_id: Option<String>,
     pub prompt_id: Option<String>,
+    pub session_id: Option<String>,
     pub intent: Option<CompletionIntent>,
     pub mode: Option<CompletionMode>,
     pub messages: Vec<LanguageModelRequestMessage>,

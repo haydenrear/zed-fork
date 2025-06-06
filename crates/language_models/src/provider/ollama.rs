@@ -3,12 +3,16 @@ use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use futures::{Stream, TryFutureExt, stream};
 use gpui::{AnyView, App, AsyncApp, Context, Subscription, Task};
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
+    _retrieve_ids, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse,
-    LanguageModelToolUseId, MessageContent, RateLimiter, Role, StopReason,
+    LanguageModelToolUseId, RequestIds, StopReason, get_message_handler_async,
+};
+use language_model::{
+    LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, MessageContent, RateLimiter, Role,
 };
 use ollama::{
     ChatMessage, ChatOptions, ChatRequest, ChatResponseDelta, KeepAlive, OllamaFunctionTool,
@@ -17,11 +21,13 @@ use ollama::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
+use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{collections::HashMap, sync::Arc};
 use ui::{ButtonLike, Indicator, List, prelude::*};
 use util::ResultExt;
+use uuid::uuid;
 
 use crate::AllLanguageModelSettings;
 use crate::ui::InstructionListItem;
@@ -417,6 +423,11 @@ impl LanguageModel for OllamaLanguageModel {
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
+        // Get message handler for saving messages
+
+        let request_copy = request.clone();
+        let ids = _retrieve_ids(&request_copy);
+
         let request = self.to_ollama_request(request);
 
         let http_client = self.http_client.clone();
@@ -427,10 +438,31 @@ impl LanguageModel for OllamaLanguageModel {
             return futures::future::ready(Err(anyhow!("App state dropped"))).boxed();
         };
 
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        let id = self.id.clone();
         let future = self.request_limiter.stream(async move {
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &request_copy,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &request_copy),
+                    )
+                    .await;
+            }
+
             let stream = stream_chat_completion(http_client.as_ref(), &api_url, request).await?;
             let stream = map_to_language_model_completion_events(stream);
-            Ok(stream)
+
+            Ok(peek_db(
+                stream,
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &request_copy),
+            )
+            .boxed())
         });
 
         future.map_ok(|f| f.boxed()).boxed()

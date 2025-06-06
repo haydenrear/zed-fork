@@ -1,3 +1,4 @@
+use crate::{AllLanguageModelSettings, ui::InstructionListItem};
 use anyhow::{Context as _, Result, anyhow};
 use collections::{BTreeMap, HashMap};
 use credentials_provider::CredentialsProvider;
@@ -8,12 +9,14 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent,
+    LanguageModelToolSchemaFormat, LanguageModelToolUse, MessageContent, RateLimiter, RequestIds,
+    Role, StopReason, TokenUsage, get_message_handler_async,
 };
 use open_ai::{ImageUrl, Model, ResponseStreamEvent, stream_completion};
 use schemars::JsonSchema;
@@ -26,8 +29,7 @@ use strum::IntoEnumIterator;
 use theme::ThemeSettings;
 use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::ResultExt;
-
-use crate::{AllLanguageModelSettings, ui::InstructionListItem};
+use uuid::uuid;
 
 const PROVIDER_ID: &str = "openai";
 const PROVIDER_NAME: &str = "OpenAI";
@@ -341,11 +343,38 @@ impl LanguageModel for OpenAiLanguageModel {
             >,
         >,
     > {
+        let original_request = request.clone();
+        let ids = _retrieve_ids(&original_request);
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        // Save request messages if handler is available
+
         let request = into_open_ai(request, &self.model, self.max_output_tokens());
+        let id = self.id.clone();
         let completions = self.stream_completion(request, cx);
         async move {
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
+            }
+
             let mapper = OpenAiEventMapper::new();
-            Ok(mapper.map_stream(completions.await?).boxed())
+            let stream = mapper.map_stream(completions.await?);
+
+            Ok(peek_db(
+                stream,
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &original_request),
+            )
+            .boxed())
         }
         .boxed()
     }
@@ -860,6 +889,7 @@ mod tests {
         let request = LanguageModelRequest {
             thread_id: None,
             prompt_id: None,
+            session_id: None,
             intent: None,
             mode: None,
             messages: vec![LanguageModelRequestMessage {

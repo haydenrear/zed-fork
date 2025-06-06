@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result, anyhow};
 use collections::BTreeMap;
 use credentials_provider::CredentialsProvider;
 use editor::{Editor, EditorElement, EditorStyle};
-use futures::{FutureExt, Stream, StreamExt, future::BoxFuture};
+use futures::{FutureExt, Stream, StreamExt, future::BoxFuture, stream::BoxStream};
 use google_ai::{
     FunctionDeclaration, GenerateContentResponse, GoogleModelMode, Part, SystemInstruction,
     ThinkingConfig, UsageMetadata,
@@ -11,15 +11,16 @@ use gpui::{
     AnyView, App, AsyncApp, Context, Entity, FontStyle, Subscription, Task, TextStyle, WhiteSpace,
 };
 use http_client::HttpClient;
+use language_model::message_handler::{LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    _retrieve_ids, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelToolChoice, LanguageModelToolSchemaFormat, LanguageModelToolUse,
-    LanguageModelToolUseId, MessageContent, StopReason,
+    LanguageModelToolUseId, MessageContent, RequestIds, StopReason,
 };
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
-    LanguageModelRequest, RateLimiter, Role,
+    LanguageModelRequest, RateLimiter, Role, get_message_handler_async,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -405,19 +406,42 @@ impl LanguageModel for GoogleLanguageModel {
     ) -> BoxFuture<
         'static,
         Result<
-            futures::stream::BoxStream<
-                'static,
-                Result<LanguageModelCompletionEvent, LanguageModelCompletionError>,
-            >,
+            BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
         >,
     > {
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        // Save request messages if handler is available
+        let prev_request = request.clone();
+
         let request = into_google(request, self.model.id().to_string(), self.model.mode());
         let request = self.stream_completion(request, cx);
+        let id = self.id.clone();
         let future = self.request_limiter.stream(async move {
+            let ids = _retrieve_ids(&prev_request);
+
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &prev_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &prev_request),
+                    )
+                    .await;
+            }
             let response = request
                 .await
                 .map_err(|err| LanguageModelCompletionError::Other(anyhow!(err)))?;
-            Ok(GoogleEventMapper::new().map_stream(response))
+
+            let stream = GoogleEventMapper::new().map_stream(response);
+            let s = peek_db(
+                stream,
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &prev_request),
+            );
+            Ok(s)
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

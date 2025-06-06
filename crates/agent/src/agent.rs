@@ -52,6 +52,7 @@ pub use crate::thread::{Message, MessageSegment, Thread, ThreadEvent};
 pub use crate::thread_store::{SerializedThread, TextThreadStore, ThreadStore};
 pub use agent_diff::{AgentDiffPane, AgentDiffToolbar};
 pub use context_store::ContextStore;
+use language_model::message_handler::{init_message_handler, MessageHandlerConfig};
 pub use ui::preview::{all_agent_previews, get_agent_preview};
 
 actions!(
@@ -124,6 +125,7 @@ pub fn init(
     is_eval: bool,
     cx: &mut App,
 ) {
+
     AgentSettings::register(cx);
     SlashCommandSettings::register(cx);
 

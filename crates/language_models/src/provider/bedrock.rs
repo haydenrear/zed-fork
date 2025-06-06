@@ -31,13 +31,14 @@ use gpui::{
 };
 use gpui_tokio::Tokio;
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
     LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId, LanguageModelName,
     LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
     LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, Role,
-    TokenUsage,
+    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, RateLimiter, RequestIds,
+    Role, TokenUsage, get_message_handler_async,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -51,7 +52,7 @@ use ui::{Icon, IconName, List, Tooltip, prelude::*};
 use util::{ResultExt, default};
 
 use crate::AllLanguageModelSettings;
-
+use uuid::uuid;
 const PROVIDER_ID: &str = "amazon-bedrock";
 const PROVIDER_NAME: &str = "Amazon Bedrock";
 
@@ -552,6 +553,8 @@ impl LanguageModel for BedrockModel {
             }
         };
 
+        let original_request = request.clone();
+
         let request = match into_bedrock(
             request,
             model_id,
@@ -565,13 +568,33 @@ impl LanguageModel for BedrockModel {
 
         let owned_handle = self.handler.clone();
 
-        let request = self.stream_completion(request, cx);
+        let request_future = self.stream_completion(request, cx);
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        let id = self.id.clone();
         let future = self.request_limiter.stream(async move {
-            let response = request.map_err(|err| anyhow!(err))?.await;
-            Ok(map_to_language_model_completion_events(
-                response,
-                owned_handle,
-            ))
+            let ids = _retrieve_ids(&original_request);
+
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
+            }
+
+            let response = request_future.map_err(|err| anyhow!(err))?.await;
+            let mapped_stream = map_to_language_model_completion_events(response, owned_handle);
+
+            Ok(peek_db(
+                mapped_stream,
+                message_handler.clone(),
+                ids,
+                LanguageModelArgs::from_request(id, &original_request),
+            )
+            .boxed())
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

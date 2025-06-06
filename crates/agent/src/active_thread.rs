@@ -1399,10 +1399,12 @@ impl ActiveThread {
         cx.emit(ActiveThreadEvent::EditingMessageTokenCountChanged);
         state._update_token_count_task.take();
 
-        let Some(configured_model) = self.thread.read(cx).configured_model() else {
+        let thread_data = self.thread.read(cx);
+        let Some(configured_model) = thread_data.configured_model() else {
             state.last_estimated_token_count.take();
             return;
         };
+        let session_id = thread_data.session_id().to_string();
 
         let editor = state.editor.clone();
         let thread = self.thread.clone();
@@ -1446,6 +1448,7 @@ impl ActiveThread {
                     let request = language_model::LanguageModelRequest {
                         thread_id: None,
                         prompt_id: None,
+                        session_id: Some(session_id),
                         intent: None,
                         mode: None,
                         messages: vec![request_message],
