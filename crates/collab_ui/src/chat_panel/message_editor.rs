@@ -15,7 +15,6 @@ use language::{
 use project::{Completion, CompletionResponse, CompletionSource, search::SearchQuery};
 use settings::Settings;
 use std::{
-    cell::RefCell,
     ops::Range,
     rc::Rc,
     sync::{Arc, LazyLock},
@@ -73,22 +72,13 @@ impl CompletionProvider for MessageEditorCompletionProvider {
         })
     }
 
-    fn resolve_completions(
-        &self,
-        _buffer: Entity<Buffer>,
-        _completion_indices: Vec<usize>,
-        _completions: Rc<RefCell<Box<[Completion]>>>,
-        _cx: &mut Context<Editor>,
-    ) -> Task<anyhow::Result<bool>> {
-        Task::ready(Ok(false))
-    }
-
     fn is_completion_trigger(
         &self,
         _buffer: &Entity<Buffer>,
         _position: language::Anchor,
         text: &str,
         _trigger_in_words: bool,
+        _menu_is_open: bool,
         _cx: &mut Context<Editor>,
     ) -> bool {
         text == "@"
@@ -251,38 +241,36 @@ impl MessageEditor {
     ) -> Task<Result<Vec<CompletionResponse>>> {
         if let Some((start_anchor, query, candidates)) =
             self.collect_mention_candidates(buffer, end_anchor, cx)
+            && !candidates.is_empty()
         {
-            if !candidates.is_empty() {
-                return cx.spawn(async move |_, cx| {
-                    let completion_response = Self::resolve_completions_for_candidates(
-                        &cx,
-                        query.as_str(),
-                        &candidates,
-                        start_anchor..end_anchor,
-                        Self::completion_for_mention,
-                    )
-                    .await;
-                    Ok(vec![completion_response])
-                });
-            }
+            return cx.spawn(async move |_, cx| {
+                let completion_response = Self::completions_for_candidates(
+                    cx,
+                    query.as_str(),
+                    &candidates,
+                    start_anchor..end_anchor,
+                    Self::completion_for_mention,
+                )
+                .await;
+                Ok(vec![completion_response])
+            });
         }
 
         if let Some((start_anchor, query, candidates)) =
             self.collect_emoji_candidates(buffer, end_anchor, cx)
+            && !candidates.is_empty()
         {
-            if !candidates.is_empty() {
-                return cx.spawn(async move |_, cx| {
-                    let completion_response = Self::resolve_completions_for_candidates(
-                        &cx,
-                        query.as_str(),
-                        candidates,
-                        start_anchor..end_anchor,
-                        Self::completion_for_emoji,
-                    )
-                    .await;
-                    Ok(vec![completion_response])
-                });
-            }
+            return cx.spawn(async move |_, cx| {
+                let completion_response = Self::completions_for_candidates(
+                    cx,
+                    query.as_str(),
+                    candidates,
+                    start_anchor..end_anchor,
+                    Self::completion_for_emoji,
+                )
+                .await;
+                Ok(vec![completion_response])
+            });
         }
 
         Task::ready(Ok(vec![CompletionResponse {
@@ -291,7 +279,7 @@ impl MessageEditor {
         }]))
     }
 
-    async fn resolve_completions_for_candidates(
+    async fn completions_for_candidates(
         cx: &AsyncApp,
         query: &str,
         candidates: &[StringMatchCandidate],
@@ -302,6 +290,7 @@ impl MessageEditor {
         let matches = fuzzy::match_strings(
             candidates,
             query,
+            true,
             true,
             LIMIT,
             &Default::default(),
@@ -408,11 +397,10 @@ impl MessageEditor {
     ) -> Option<(Anchor, String, &'static [StringMatchCandidate])> {
         static EMOJI_FUZZY_MATCH_CANDIDATES: LazyLock<Vec<StringMatchCandidate>> =
             LazyLock::new(|| {
-                let emojis = emojis::iter()
+                emojis::iter()
                     .flat_map(|s| s.shortcodes())
                     .map(|emoji| StringMatchCandidate::new(0, emoji))
-                    .collect::<Vec<_>>();
-                emojis
+                    .collect::<Vec<_>>()
             });
 
         let end_offset = end_anchor.to_offset(buffer.read(cx));
@@ -483,18 +471,17 @@ impl MessageEditor {
                 for range in ranges {
                     text.clear();
                     text.extend(buffer.text_for_range(range.clone()));
-                    if let Some(username) = text.strip_prefix('@') {
-                        if let Some(user) = this
+                    if let Some(username) = text.strip_prefix('@')
+                        && let Some(user) = this
                             .user_store
                             .read(cx)
                             .cached_user_by_github_login(username)
-                        {
-                            let start = multi_buffer.anchor_after(range.start);
-                            let end = multi_buffer.anchor_after(range.end);
+                    {
+                        let start = multi_buffer.anchor_after(range.start);
+                        let end = multi_buffer.anchor_after(range.end);
 
-                            mentioned_user_ids.push(user.id);
-                            anchor_ranges.push(start..end);
-                        }
+                        mentioned_user_ids.push(user.id);
+                        anchor_ranges.push(start..end);
                     }
                 }
 

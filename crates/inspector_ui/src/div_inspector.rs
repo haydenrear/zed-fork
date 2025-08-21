@@ -1,5 +1,8 @@
 use anyhow::{Result, anyhow};
-use editor::{Bias, CompletionProvider, Editor, EditorEvent, EditorMode, ExcerptId, MultiBuffer};
+use editor::{
+    Bias, CompletionProvider, Editor, EditorEvent, EditorMode, ExcerptId, MinimapVisibility,
+    MultiBuffer,
+};
 use fuzzy::StringMatch;
 use gpui::{
     AsyncWindowContext, DivInspectorState, Entity, InspectorElementId, IntoElement,
@@ -12,7 +15,6 @@ use language::{
 };
 use project::lsp_store::CompletionDocumentation;
 use project::{Completion, CompletionResponse, CompletionSource, Project, ProjectPath};
-use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::ops::Range;
 use std::path::Path;
@@ -91,8 +93,8 @@ impl DivInspector {
                     Ok((json_style_buffer, rust_style_buffer)) => {
                         this.update_in(cx, |this, window, cx| {
                             this.state = State::BuffersLoaded {
-                                json_style_buffer: json_style_buffer,
-                                rust_style_buffer: rust_style_buffer,
+                                json_style_buffer,
+                                rust_style_buffer,
                             };
 
                             // Initialize editors immediately instead of waiting for
@@ -198,8 +200,8 @@ impl DivInspector {
         cx.subscribe_in(&json_style_editor, window, {
             let id = id.clone();
             let rust_style_buffer = rust_style_buffer.clone();
-            move |this, editor, event: &EditorEvent, window, cx| match event {
-                EditorEvent::BufferEdited => {
+            move |this, editor, event: &EditorEvent, window, cx| {
+                if event == &EditorEvent::BufferEdited {
                     let style_json = editor.read(cx).text(cx);
                     match serde_json_lenient::from_str_lenient::<StyleRefinement>(&style_json) {
                         Ok(new_style) => {
@@ -241,7 +243,6 @@ impl DivInspector {
                         Err(err) => this.json_style_error = Some(err.to_string().into()),
                     }
                 }
-                _ => {}
             }
         })
         .detach();
@@ -249,11 +250,10 @@ impl DivInspector {
         cx.subscribe(&rust_style_editor, {
             let json_style_buffer = json_style_buffer.clone();
             let rust_style_buffer = rust_style_buffer.clone();
-            move |this, _editor, event: &EditorEvent, cx| match event {
-                EditorEvent::BufferEdited => {
+            move |this, _editor, event: &EditorEvent, cx| {
+                if let EditorEvent::BufferEdited = event {
                     this.update_json_style_from_rust(&json_style_buffer, &rust_style_buffer, cx);
                 }
-                _ => {}
             }
         })
         .detach();
@@ -269,23 +269,19 @@ impl DivInspector {
     }
 
     fn reset_style(&mut self, cx: &mut App) {
-        match &self.state {
-            State::Ready {
-                rust_style_buffer,
-                json_style_buffer,
-                ..
-            } => {
-                if let Err(err) = self.reset_style_editors(
-                    &rust_style_buffer.clone(),
-                    &json_style_buffer.clone(),
-                    cx,
-                ) {
-                    self.json_style_error = Some(format!("{err}").into());
-                } else {
-                    self.json_style_error = None;
-                }
+        if let State::Ready {
+            rust_style_buffer,
+            json_style_buffer,
+            ..
+        } = &self.state
+        {
+            if let Err(err) =
+                self.reset_style_editors(&rust_style_buffer.clone(), &json_style_buffer.clone(), cx)
+            {
+                self.json_style_error = Some(format!("{err}").into());
+            } else {
+                self.json_style_error = None;
             }
-            _ => {}
         }
     }
 
@@ -393,11 +389,11 @@ impl DivInspector {
             .zip(self.rust_completion_replace_range.as_ref())
         {
             let before_text = snapshot
-                .text_for_range(0..completion_range.start.to_offset(&snapshot))
+                .text_for_range(0..completion_range.start.to_offset(snapshot))
                 .collect::<String>();
             let after_text = snapshot
                 .text_for_range(
-                    completion_range.end.to_offset(&snapshot)
+                    completion_range.end.to_offset(snapshot)
                         ..snapshot.clip_offset(usize::MAX, Bias::Left),
                 )
                 .collect::<String>();
@@ -500,6 +496,7 @@ impl DivInspector {
             editor.set_show_git_diff_gutter(false, cx);
             editor.set_show_runnables(false, cx);
             editor.set_show_edit_predictions(Some(false), window, cx);
+            editor.set_minimap_visibility(MinimapVisibility::Disabled, window, cx);
             editor
         })
     }
@@ -671,22 +668,13 @@ impl CompletionProvider for RustStyleCompletionProvider {
         }]))
     }
 
-    fn resolve_completions(
-        &self,
-        _buffer: Entity<Buffer>,
-        _completion_indices: Vec<usize>,
-        _completions: Rc<RefCell<Box<[Completion]>>>,
-        _cx: &mut Context<Editor>,
-    ) -> Task<Result<bool>> {
-        Task::ready(Ok(true))
-    }
-
     fn is_completion_trigger(
         &self,
         buffer: &Entity<language::Buffer>,
         position: language::Anchor,
-        _: &str,
-        _: bool,
+        _text: &str,
+        _trigger_in_words: bool,
+        _menu_is_open: bool,
         cx: &mut Context<Editor>,
     ) -> bool {
         completion_replace_range(&buffer.read(cx).snapshot(), &position).is_some()
@@ -708,10 +696,10 @@ impl CompletionProvider for RustStyleCompletionProvider {
 }
 
 fn completion_replace_range(snapshot: &BufferSnapshot, anchor: &Anchor) -> Option<Range<Anchor>> {
-    let point = anchor.to_point(&snapshot);
-    let offset = point.to_offset(&snapshot);
-    let line_start = Point::new(point.row, 0).to_offset(&snapshot);
-    let line_end = Point::new(point.row, snapshot.line_len(point.row)).to_offset(&snapshot);
+    let point = anchor.to_point(snapshot);
+    let offset = point.to_offset(snapshot);
+    let line_start = Point::new(point.row, 0).to_offset(snapshot);
+    let line_end = Point::new(point.row, snapshot.line_len(point.row)).to_offset(snapshot);
     let mut lines = snapshot.text_for_range(line_start..line_end).lines();
     let line = lines.next()?;
 
@@ -725,7 +713,7 @@ fn completion_replace_range(snapshot: &BufferSnapshot, anchor: &Anchor) -> Optio
 
     if end_in_line > start_in_line {
         let replace_start = snapshot.anchor_before(line_start + start_in_line);
-        let replace_end = snapshot.anchor_before(line_start + end_in_line);
+        let replace_end = snapshot.anchor_after(line_start + end_in_line);
         Some(replace_start..replace_end)
     } else {
         None

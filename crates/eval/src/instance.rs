@@ -90,11 +90,8 @@ impl ExampleInstance {
         worktrees_dir: &Path,
         repetition: usize,
     ) -> Self {
-        let name = thread.meta().name.to_string();
-        let run_directory = run_dir
-            .join(&name)
-            .join(repetition.to_string())
-            .to_path_buf();
+        let name = thread.meta().name;
+        let run_directory = run_dir.join(&name).join(repetition.to_string());
 
         let repo_path = repo_path_for_url(repos_dir, &thread.meta().url);
 
@@ -306,17 +303,19 @@ impl ExampleInstance {
 
             let thread_store = thread_store.await?;
 
-            let profile_id = meta.profile_id.clone();
-            thread_store.update(cx, |thread_store, cx| thread_store.load_profile_by_id(profile_id, cx)).expect("Failed to load profile");
 
             let thread =
                 thread_store.update(cx, |thread_store, cx| {
-                    if let Some(json) = &meta.existing_thread_json {
+                    let thread = if let Some(json) = &meta.existing_thread_json {
                         let serialized = SerializedThread::from_json(json.as_bytes()).expect("Can't read serialized thread");
                         thread_store.create_thread_from_serialized(serialized, cx)
                     } else {
                         thread_store.create_thread(cx)
-                    }
+                    };
+                    thread.update(cx, |thread, cx| {
+                        thread.set_profile(meta.profile_id.clone(), cx);
+                    });
+                    thread
                 })?;
 
 
@@ -365,14 +364,19 @@ impl ExampleInstance {
                 });
             })?;
 
-            let mut example_cx = ExampleContext::new(meta.clone(), this.log_prefix.clone(), thread.clone(), model.clone(), cx.clone());
+            let mut example_cx = ExampleContext::new(
+                meta.clone(),
+                this.log_prefix.clone(),
+                thread.clone(),
+                model.clone(),
+                cx.clone(),
+            );
             let result = this.thread.conversation(&mut example_cx).await;
 
-            if let Err(err) = result {
-                if !err.is::<FailedAssertion>() {
+            if let Err(err) = result
+                && !err.is::<FailedAssertion>() {
                     return Err(err);
                 }
-            }
 
             println!("{}Stopped", this.log_prefix);
 
@@ -451,8 +455,8 @@ impl ExampleInstance {
         let mut output_file =
             File::create(self.run_directory.join("judge.md")).expect("failed to create judge.md");
 
-        let diff_task = self.judge_diff(model.clone(), &run_output, cx);
-        let thread_task = self.judge_thread(model.clone(), &run_output, cx);
+        let diff_task = self.judge_diff(model.clone(), run_output, cx);
+        let thread_task = self.judge_thread(model.clone(), run_output, cx);
 
         let (diff_result, thread_result) = futures::join!(diff_task, thread_task);
 
@@ -587,6 +591,7 @@ impl ExampleInstance {
                 tools: Vec::new(),
                 tool_choice: None,
                 stop: Vec::new(),
+                thinking_allowed: true,
             };
 
             let model = model.clone();
@@ -653,7 +658,7 @@ pub fn wait_for_lang_server(
         .update(cx, |buffer, cx| {
             lsp_store.update(cx, |lsp_store, cx| {
                 lsp_store
-                    .language_servers_for_local_buffer(&buffer, cx)
+                    .language_servers_for_local_buffer(buffer, cx)
                     .next()
                     .is_some()
             })
@@ -671,8 +676,8 @@ pub fn wait_for_lang_server(
         [
             cx.subscribe(&lsp_store, {
                 let log_prefix = log_prefix.clone();
-                move |_, event, _| match event {
-                    project::LspStoreEvent::LanguageServerUpdate {
+                move |_, event, _| {
+                    if let project::LspStoreEvent::LanguageServerUpdate {
                         message:
                             client::proto::update_language_server::Variant::WorkProgress(
                                 LspWorkProgress {
@@ -681,11 +686,13 @@ pub fn wait_for_lang_server(
                                 },
                             ),
                         ..
-                    } => println!("{}⟲ {message}", log_prefix),
-                    _ => {}
+                    } = event
+                    {
+                        println!("{}⟲ {message}", log_prefix)
+                    }
                 }
             }),
-            cx.subscribe(&project, {
+            cx.subscribe(project, {
                 let buffer = buffer.clone();
                 move |project, event, cx| match event {
                     project::Event::LanguageServerAdded(_, _, _) => {
@@ -763,7 +770,7 @@ pub async fn query_lsp_diagnostics(
 }
 
 fn parse_assertion_result(response: &str) -> Result<RanAssertionResult> {
-    let analysis = get_tag("analysis", response)?.to_string();
+    let analysis = get_tag("analysis", response)?;
     let passed = match get_tag("passed", response)?.to_lowercase().as_str() {
         "true" => true,
         "false" => false,
@@ -830,7 +837,7 @@ fn messages_to_markdown<'a>(message_iter: impl IntoIterator<Item = &'a Message>)
         for segment in &message.segments {
             match segment {
                 MessageSegment::Text(text) => {
-                    messages.push_str(&text);
+                    messages.push_str(text);
                     messages.push_str("\n\n");
                 }
                 MessageSegment::Thinking { text, signature } => {
@@ -838,7 +845,7 @@ fn messages_to_markdown<'a>(message_iter: impl IntoIterator<Item = &'a Message>)
                     if let Some(sig) = signature {
                         messages.push_str(&format!("Signature: {}\n\n", sig));
                     }
-                    messages.push_str(&text);
+                    messages.push_str(text);
                     messages.push_str("\n");
                 }
                 MessageSegment::RedactedThinking(items) => {
@@ -870,7 +877,7 @@ pub async fn send_language_model_request(
     request: LanguageModelRequest,
     cx: &AsyncApp,
 ) -> anyhow::Result<String> {
-    match model.stream_completion_text(request, &cx).await {
+    match model.stream_completion_text(request, cx).await {
         Ok(mut stream) => {
             let mut full_response = String::new();
             while let Some(chunk_result) = stream.stream.next().await {
@@ -907,9 +914,9 @@ impl RequestMarkdown {
             for tool in &request.tools {
                 write!(&mut tools, "# {}\n\n", tool.name).unwrap();
                 write!(&mut tools, "{}\n\n", tool.description).unwrap();
-                write!(
+                writeln!(
                     &mut tools,
-                    "{}\n",
+                    "{}",
                     MarkdownCodeBlock {
                         tag: "json",
                         text: &format!("{:#}", tool.input_schema)
@@ -1023,6 +1030,7 @@ pub fn response_events_to_markdown(
             Ok(LanguageModelCompletionEvent::Thinking { text, .. }) => {
                 thinking_buffer.push_str(text);
             }
+            Ok(LanguageModelCompletionEvent::RedactedThinking { .. }) => {}
             Ok(LanguageModelCompletionEvent::Stop(reason)) => {
                 flush_buffers(&mut response, &mut text_buffer, &mut thinking_buffer);
                 response.push_str(&format!("**Stop**: {:?}\n\n", reason));
@@ -1046,6 +1054,15 @@ pub fn response_events_to_markdown(
                 | LanguageModelCompletionEvent::StartMessage { .. }
                 | LanguageModelCompletionEvent::StatusUpdate { .. },
             ) => {}
+            Ok(LanguageModelCompletionEvent::ToolUseJsonParseError {
+                json_parse_error, ..
+            }) => {
+                flush_buffers(&mut response, &mut text_buffer, &mut thinking_buffer);
+                response.push_str(&format!(
+                    "**Error**: parse error in tool use JSON: {}\n\n",
+                    json_parse_error
+                ));
+            }
             Err(error) => {
                 flush_buffers(&mut response, &mut text_buffer, &mut thinking_buffer);
                 response.push_str(&format!("**Error**: {}\n\n", error));
@@ -1119,9 +1136,21 @@ impl ThreadDialog {
 
                 // Skip these
                 Ok(LanguageModelCompletionEvent::UsageUpdate(_))
+                | Ok(LanguageModelCompletionEvent::RedactedThinking { .. })
                 | Ok(LanguageModelCompletionEvent::StatusUpdate { .. })
                 | Ok(LanguageModelCompletionEvent::StartMessage { .. })
                 | Ok(LanguageModelCompletionEvent::Stop(_)) => {}
+
+                Ok(LanguageModelCompletionEvent::ToolUseJsonParseError {
+                    json_parse_error,
+                    ..
+                }) => {
+                    flush_text(&mut current_text, &mut content);
+                    content.push(MessageContent::Text(format!(
+                        "ERROR: parse error in tool use JSON: {}",
+                        json_parse_error
+                    )));
+                }
 
                 Err(error) => {
                     flush_text(&mut current_text, &mut content);
@@ -1161,7 +1190,7 @@ mod test {
             output.analysis,
             Some("The model did a good job but there were still compilations errors.".into())
         );
-        assert_eq!(output.passed, true);
+        assert!(output.passed);
 
         let response = r#"
             Text around ignored
@@ -1181,6 +1210,6 @@ mod test {
             output.analysis,
             Some("Failed to compile:\n- Error 1\n- Error 2".into())
         );
-        assert_eq!(output.passed, false);
+        assert!(!output.passed);
     }
 }

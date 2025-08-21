@@ -1,5 +1,5 @@
-use editor::{Editor, MultiBufferSnapshot, ToOffset, ToPoint, scroll::Autoscroll};
-use gpui::{Context, Window, impl_actions};
+use editor::{Editor, MultiBufferSnapshot, ToOffset, ToPoint};
+use gpui::{Action, Context, Window};
 use language::{Bias, Point};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -9,21 +9,23 @@ use crate::{Vim, state::Mode};
 
 const BOOLEAN_PAIRS: &[(&str, &str)] = &[("true", "false"), ("yes", "no"), ("on", "off")];
 
-#[derive(Clone, Deserialize, JsonSchema, PartialEq)]
+/// Increments the number under the cursor or toggles boolean values.
+#[derive(Clone, Deserialize, JsonSchema, PartialEq, Action)]
+#[action(namespace = vim)]
 #[serde(deny_unknown_fields)]
 struct Increment {
     #[serde(default)]
     step: bool,
 }
 
-#[derive(Clone, Deserialize, JsonSchema, PartialEq)]
+/// Decrements the number under the cursor or toggles boolean values.
+#[derive(Clone, Deserialize, JsonSchema, PartialEq, Action)]
+#[action(namespace = vim)]
 #[serde(deny_unknown_fields)]
 struct Decrement {
     #[serde(default)]
     step: bool,
 }
-
-impl_actions!(vim, [Increment, Decrement]);
 
 pub fn register(editor: &mut Editor, cx: &mut Context<Vim>) {
     Vim::action(editor, cx, |vim, action: &Increment, window, cx| {
@@ -51,7 +53,7 @@ impl Vim {
         cx: &mut Context<Self>,
     ) {
         self.store_visual_marks(window, cx);
-        self.update_editor(window, cx, |vim, editor, window, cx| {
+        self.update_editor(cx, |vim, editor, cx| {
             let mut edits = Vec::new();
             let mut new_anchors = Vec::new();
 
@@ -97,7 +99,7 @@ impl Vim {
                 editor.edit(edits, cx);
 
                 let snapshot = editor.buffer().read(cx).snapshot(cx);
-                editor.change_selections(Some(Autoscroll::fit()), window, cx, |s| {
+                editor.change_selections(Default::default(), window, cx, |s| {
                     let mut new_ranges = Vec::new();
                     for (visual, anchor) in new_anchors.iter() {
                         let mut point = anchor.to_point(&snapshot);
@@ -153,7 +155,7 @@ fn increment_decimal_string(num: &str, delta: i64) -> String {
 }
 
 fn increment_hex_string(num: &str, delta: i64) -> String {
-    let result = if let Ok(val) = u64::from_str_radix(&num, 16) {
+    let result = if let Ok(val) = u64::from_str_radix(num, 16) {
         val.wrapping_add_signed(delta)
     } else {
         u64::MAX
@@ -179,7 +181,7 @@ fn should_use_lowercase(num: &str) -> bool {
 }
 
 fn increment_binary_string(num: &str, delta: i64) -> String {
-    let result = if let Ok(val) = u64::from_str_radix(&num, 2) {
+    let result = if let Ok(val) = u64::from_str_radix(num, 2) {
         val.wrapping_add_signed(delta)
     } else {
         u64::MAX
@@ -272,9 +274,9 @@ fn find_boolean(snapshot: &MultiBufferSnapshot, start: Point) -> Option<(Range<P
     let mut end = None;
     let mut word = String::new();
 
-    let mut chars = snapshot.chars_at(offset);
+    let chars = snapshot.chars_at(offset);
 
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         if ch.is_ascii_alphabetic() {
             if begin.is_none() {
                 begin = Some(offset);

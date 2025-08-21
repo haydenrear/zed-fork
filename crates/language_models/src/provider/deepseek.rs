@@ -9,16 +9,12 @@ use gpui::{
     WhiteSpace,
 };
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
-    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
-    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
-    LanguageModelRequest, LanguageModelToolChoice, RateLimiter, RequestIds, Role,
-    get_message_handler_async,
-};
-use language_model::{
-    LanguageModelToolResultContent, LanguageModelToolUse, MessageContent, StopReason,
+    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
+    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
+    RateLimiter, Role, StopReason, TokenUsage,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -31,10 +27,9 @@ use ui::{Icon, IconName, List, prelude::*};
 use util::ResultExt;
 
 use crate::{AllLanguageModelSettings, ui::InstructionListItem};
-use uuid::uuid;
 
-const PROVIDER_ID: &str = "deepseek";
-const PROVIDER_NAME: &str = "DeepSeek";
+const PROVIDER_ID: LanguageModelProviderId = LanguageModelProviderId::new("deepseek");
+const PROVIDER_NAME: LanguageModelProviderName = LanguageModelProviderName::new("DeepSeek");
 const DEEPSEEK_API_KEY_VAR: &str = "DEEPSEEK_API_KEY";
 
 #[derive(Default)]
@@ -54,8 +49,8 @@ pub struct DeepSeekSettings {
 pub struct AvailableModel {
     pub name: String,
     pub display_name: Option<String>,
-    pub max_tokens: usize,
-    pub max_output_tokens: Option<u32>,
+    pub max_tokens: u64,
+    pub max_output_tokens: Option<u64>,
 }
 
 pub struct DeepSeekLanguageModelProvider {
@@ -82,7 +77,7 @@ impl State {
             .clone();
         cx.spawn(async move |this, cx| {
             credentials_provider
-                .delete_credentials(&api_url, &cx)
+                .delete_credentials(&api_url, cx)
                 .await
                 .log_err();
             this.update(cx, |this, cx| {
@@ -101,7 +96,7 @@ impl State {
             .clone();
         cx.spawn(async move |this, cx| {
             credentials_provider
-                .write_credentials(&api_url, "Bearer", api_key.as_bytes(), &cx)
+                .write_credentials(&api_url, "Bearer", api_key.as_bytes(), cx)
                 .await?;
             this.update(cx, |this, cx| {
                 this.api_key = Some(api_key);
@@ -125,7 +120,7 @@ impl State {
                 (api_key, true)
             } else {
                 let (_, api_key) = credentials_provider
-                    .read_credentials(&api_url, &cx)
+                    .read_credentials(&api_url, cx)
                     .await?
                     .ok_or(AuthenticateError::CredentialsNotFound)?;
                 (
@@ -179,11 +174,11 @@ impl LanguageModelProviderState for DeepSeekLanguageModelProvider {
 
 impl LanguageModelProvider for DeepSeekLanguageModelProvider {
     fn id(&self) -> LanguageModelProviderId {
-        LanguageModelProviderId(PROVIDER_ID.into())
+        PROVIDER_ID
     }
 
     fn name(&self) -> LanguageModelProviderName {
-        LanguageModelProviderName(PROVIDER_NAME.into())
+        PROVIDER_NAME
     }
 
     fn icon(&self) -> IconName {
@@ -234,7 +229,12 @@ impl LanguageModelProvider for DeepSeekLanguageModelProvider {
         self.state.update(cx, |state, cx| state.authenticate(cx))
     }
 
-    fn configuration_view(&self, window: &mut Window, cx: &mut App) -> AnyView {
+    fn configuration_view(
+        &self,
+        _target_agent: language_model::ConfigurationViewTargetAgent,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyView {
         cx.new(|cx| ConfigurationView::new(self.state.clone(), window, cx))
             .into()
     }
@@ -288,11 +288,11 @@ impl LanguageModel for DeepSeekLanguageModel {
     }
 
     fn provider_id(&self) -> LanguageModelProviderId {
-        LanguageModelProviderId(PROVIDER_ID.into())
+        PROVIDER_ID
     }
 
     fn provider_name(&self) -> LanguageModelProviderName {
-        LanguageModelProviderName(PROVIDER_NAME.into())
+        PROVIDER_NAME
     }
 
     fn supports_tools(&self) -> bool {
@@ -311,11 +311,11 @@ impl LanguageModel for DeepSeekLanguageModel {
         format!("deepseek/{}", self.model.id())
     }
 
-    fn max_token_count(&self) -> usize {
+    fn max_token_count(&self) -> u64 {
         self.model.max_token_count()
     }
 
-    fn max_output_tokens(&self) -> Option<u32> {
+    fn max_output_tokens(&self) -> Option<u64> {
         self.model.max_output_tokens()
     }
 
@@ -323,7 +323,7 @@ impl LanguageModel for DeepSeekLanguageModel {
         &self,
         request: LanguageModelRequest,
         cx: &App,
-    ) -> BoxFuture<'static, Result<usize>> {
+    ) -> BoxFuture<'static, Result<u64>> {
         cx.background_spawn(async move {
             let messages = request
                 .messages
@@ -340,7 +340,7 @@ impl LanguageModel for DeepSeekLanguageModel {
                 })
                 .collect::<Vec<_>>();
 
-            tiktoken_rs::num_tokens_from_messages("gpt-4", &messages)
+            tiktoken_rs::num_tokens_from_messages("gpt-4", &messages).map(|tokens| tokens as u64)
         })
         .boxed()
     }
@@ -353,35 +353,15 @@ impl LanguageModel for DeepSeekLanguageModel {
         'static,
         Result<
             BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
+            LanguageModelCompletionError,
         >,
     > {
-        let original_request = request.clone();
         let request = into_deepseek(request, &self.model, self.max_output_tokens());
         let stream = self.stream_completion(request, cx);
 
-        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
-        let id = self.id.clone();
         async move {
-            let ids = _retrieve_ids(&original_request);
-
-            // Save request messages if handler is available
-            if let Some(handler) = &message_handler {
-                handler
-                    .save_completion_req(
-                        &original_request,
-                        &ids,
-                        LanguageModelArgs::from_request(id.clone(), &original_request),
-                    )
-                    .await;
-            }
-
             let mapper = DeepSeekEventMapper::new();
-            Ok(peek_db(
-                mapper.map_stream(stream.await?).boxed(),
-                message_handler,
-                ids,
-                LanguageModelArgs::from_request(id, &original_request),
-            ))
+            Ok(mapper.map_stream(stream.await?).boxed())
         }
         .boxed()
     }
@@ -390,7 +370,7 @@ impl LanguageModel for DeepSeekLanguageModel {
 pub fn into_deepseek(
     request: LanguageModelRequest,
     model: &deepseek::Model,
-    max_output_tokens: Option<u32>,
+    max_output_tokens: Option<u64>,
 ) -> deepseek::Request {
     let is_reasoner = *model == deepseek::Model::Reasoner;
 
@@ -398,15 +378,15 @@ pub fn into_deepseek(
     for message in request.messages {
         for content in message.content {
             match content {
-                MessageContent::Text(text) | MessageContent::Thinking { text, .. } => messages
-                    .push(match message.role {
-                        Role::User => deepseek::RequestMessage::User { content: text },
-                        Role::Assistant => deepseek::RequestMessage::Assistant {
-                            content: Some(text),
-                            tool_calls: Vec::new(),
-                        },
-                        Role::System => deepseek::RequestMessage::System { content: text },
-                    }),
+                MessageContent::Text(text) => messages.push(match message.role {
+                    Role::User => deepseek::RequestMessage::User { content: text },
+                    Role::Assistant => deepseek::RequestMessage::Assistant {
+                        content: Some(text),
+                        tool_calls: Vec::new(),
+                    },
+                    Role::System => deepseek::RequestMessage::System { content: text },
+                }),
+                MessageContent::Thinking { .. } => {}
                 MessageContent::RedactedThinking(_) => {}
                 MessageContent::Image(_) => {}
                 MessageContent::ToolUse(tool_use) => {
@@ -491,7 +471,7 @@ impl DeepSeekEventMapper {
         events.flat_map(move |event| {
             futures::stream::iter(match event {
                 Ok(event) => self.map_event(event),
-                Err(error) => vec![Err(LanguageModelCompletionError::Other(anyhow!(error)))],
+                Err(error) => vec![Err(LanguageModelCompletionError::from(error))],
             })
         })
     }
@@ -501,7 +481,7 @@ impl DeepSeekEventMapper {
         event: deepseek::StreamResponse,
     ) -> Vec<Result<LanguageModelCompletionEvent, LanguageModelCompletionError>> {
         let Some(choice) = event.choices.first() else {
-            return vec![Err(LanguageModelCompletionError::Other(anyhow!(
+            return vec![Err(LanguageModelCompletionError::from(anyhow!(
                 "Response contained no choices"
             )))];
         };
@@ -509,6 +489,13 @@ impl DeepSeekEventMapper {
         let mut events = Vec::new();
         if let Some(content) = choice.delta.content.clone() {
             events.push(Ok(LanguageModelCompletionEvent::Text(content)));
+        }
+
+        if let Some(reasoning_content) = choice.delta.reasoning_content.clone() {
+            events.push(Ok(LanguageModelCompletionEvent::Thinking {
+                text: reasoning_content,
+                signature: None,
+            }));
         }
 
         if let Some(tool_calls) = choice.delta.tool_calls.as_ref() {
@@ -531,6 +518,15 @@ impl DeepSeekEventMapper {
             }
         }
 
+        if let Some(usage) = event.usage {
+            events.push(Ok(LanguageModelCompletionEvent::UsageUpdate(TokenUsage {
+                input_tokens: usage.prompt_tokens,
+                output_tokens: usage.completion_tokens,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            })));
+        }
+
         match choice.finish_reason.as_deref() {
             Some("stop") => {
                 events.push(Ok(LanguageModelCompletionEvent::Stop(StopReason::EndTurn)));
@@ -547,8 +543,8 @@ impl DeepSeekEventMapper {
                                 raw_input: tool_call.arguments.clone(),
                             },
                         )),
-                        Err(error) => Err(LanguageModelCompletionError::BadInputJson {
-                            id: tool_call.id.into(),
+                        Err(error) => Ok(LanguageModelCompletionEvent::ToolUseJsonParseError {
+                            id: tool_call.id.clone().into(),
                             tool_name: tool_call.name.as_str().into(),
                             raw_input: tool_call.arguments.into(),
                             json_parse_error: error.to_string(),

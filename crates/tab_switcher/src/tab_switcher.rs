@@ -7,7 +7,7 @@ use fuzzy::StringMatchCandidate;
 use gpui::{
     Action, AnyElement, App, Context, DismissEvent, Entity, EntityId, EventEmitter, FocusHandle,
     Focusable, Modifiers, ModifiersChangedEvent, MouseButton, MouseUpEvent, ParentElement, Render,
-    Styled, Task, WeakEntity, Window, actions, impl_actions, rems,
+    Styled, Task, WeakEntity, Window, actions, rems,
 };
 use picker::{Picker, PickerDelegate};
 use project::Project;
@@ -25,15 +25,23 @@ use workspace::{
 
 const PANEL_WIDTH_REMS: f32 = 28.;
 
-#[derive(PartialEq, Clone, Deserialize, JsonSchema, Default)]
+/// Toggles the tab switcher interface.
+#[derive(PartialEq, Clone, Deserialize, JsonSchema, Default, Action)]
+#[action(namespace = tab_switcher)]
 #[serde(deny_unknown_fields)]
 pub struct Toggle {
     #[serde(default)]
     pub select_last: bool,
 }
-
-impl_actions!(tab_switcher, [Toggle]);
-actions!(tab_switcher, [CloseSelectedItem, ToggleAll]);
+actions!(
+    tab_switcher,
+    [
+        /// Closes the selected item in the tab switcher.
+        CloseSelectedItem,
+        /// Toggles between showing all tabs or just the current pane's tabs.
+        ToggleAll
+    ]
+);
 
 pub struct TabSwitcher {
     picker: Entity<Picker<TabSwitcherDelegate>>,
@@ -299,7 +307,6 @@ impl TabSwitcherDelegate {
                     (Reverse(history.get(&item.item.item_id())), item.item_index)
                 )
             }
-            eprintln!("");
             all_items
                 .sort_by_key(|tab| (Reverse(history.get(&tab.item.item_id())), tab.item_index));
             all_items
@@ -317,6 +324,7 @@ impl TabSwitcherDelegate {
             smol::block_on(fuzzy::match_strings(
                 &candidates,
                 &query,
+                true,
                 true,
                 10000,
                 &Default::default(),

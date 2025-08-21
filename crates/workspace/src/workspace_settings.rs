@@ -1,5 +1,6 @@
 use std::num::NonZeroUsize;
 
+use crate::DockPosition;
 use anyhow::Result;
 use collections::HashMap;
 use gpui::App;
@@ -26,6 +27,7 @@ pub struct WorkspaceSettings {
     pub max_tabs: Option<NonZeroUsize>,
     pub when_closing_with_no_tabs: CloseWindowWhenNoItems,
     pub on_last_window_closed: OnLastWindowClosed,
+    pub resize_all_panels_in_dock: Vec<DockPosition>,
     pub close_on_file_delete: bool,
 }
 
@@ -192,6 +194,10 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: auto (nothing on macOS, "app quit" otherwise)
     pub on_last_window_closed: Option<OnLastWindowClosed>,
+    /// Whether to resize all the panels in a dock when resizing the dock.
+    ///
+    /// Default: ["left"]
+    pub resize_all_panels_in_dock: Option<Vec<DockPosition>>,
     /// Whether to automatically close files that have been deleted on disk.
     ///
     /// Default: false
@@ -276,19 +282,17 @@ impl Settings for WorkspaceSettings {
         if vscode
             .read_bool("accessibility.dimUnfocused.enabled")
             .unwrap_or_default()
-        {
-            if let Some(opacity) = vscode
+            && let Some(opacity) = vscode
                 .read_value("accessibility.dimUnfocused.opacity")
                 .and_then(|v| v.as_f64())
-            {
-                if let Some(settings) = current.active_pane_modifiers.as_mut() {
-                    settings.inactive_opacity = Some(opacity as f32)
-                } else {
-                    current.active_pane_modifiers = Some(ActivePanelModifiers {
-                        inactive_opacity: Some(opacity as f32),
-                        ..Default::default()
-                    })
-                }
+        {
+            if let Some(settings) = current.active_pane_modifiers.as_mut() {
+                settings.inactive_opacity = Some(opacity as f32)
+            } else {
+                current.active_pane_modifiers = Some(ActivePanelModifiers {
+                    inactive_opacity: Some(opacity as f32),
+                    ..Default::default()
+                })
             }
         }
 
@@ -339,13 +343,11 @@ impl Settings for WorkspaceSettings {
             .read_value("workbench.editor.limit.value")
             .and_then(|v| v.as_u64())
             .and_then(|n| NonZeroUsize::new(n as usize))
-        {
-            if vscode
+            && vscode
                 .read_bool("workbench.editor.limit.enabled")
                 .unwrap_or_default()
-            {
-                current.max_tabs = Some(n)
-            }
+        {
+            current.max_tabs = Some(n)
         }
 
         // some combination of "window.restoreWindows" and "workbench.startupEditor" might

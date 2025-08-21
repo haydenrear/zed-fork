@@ -1,12 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
 use editor::test::editor_lsp_test_context::EditorLspTestContext;
-use gpui::{Context, Entity, SemanticVersion, UpdateGlobal, actions};
+use gpui::{Context, Entity, SemanticVersion, UpdateGlobal};
 use search::{BufferSearchBar, project_search::ProjectSearchBar};
 
 use crate::{state::Operator, *};
-
-actions!(agent, [Chat]);
 
 pub struct VimTestContext {
     cx: EditorLspTestContext,
@@ -17,6 +15,7 @@ impl VimTestContext {
         if cx.has_global::<VimGlobals>() {
             return;
         }
+        env_logger::try_init().ok();
         cx.update(|cx| {
             let settings = SettingsStore::test(cx);
             cx.set_global(settings);
@@ -74,8 +73,12 @@ impl VimTestContext {
         .unwrap();
         cx.bind_keys(default_key_bindings);
         if enabled {
-            let vim_key_bindings =
-                settings::KeymapFile::load_asset("keymaps/vim.json", cx).unwrap();
+            let vim_key_bindings = settings::KeymapFile::load_asset(
+                "keymaps/vim.json",
+                Some(settings::KeybindSource::Vim),
+                cx,
+            )
+            .unwrap();
             cx.bind_keys(vim_key_bindings);
         }
     }
@@ -136,6 +139,16 @@ impl VimTestContext {
         self.cx.update(|_, cx| {
             SettingsStore::update_global(cx, |store, cx| {
                 store.update_user_settings::<VimModeSetting>(cx, |s| *s = Some(false));
+            });
+        })
+    }
+
+    pub fn enable_helix(&mut self) {
+        self.cx.update(|_, cx| {
+            SettingsStore::update_global(cx, |store, cx| {
+                store.update_user_settings::<vim_mode_setting::HelixModeSetting>(cx, |s| {
+                    *s = Some(true)
+                });
             });
         })
     }
@@ -206,6 +219,26 @@ impl VimTestContext {
         self.cx.assert_editor_state(state_after);
         assert_eq!(self.mode(), Mode::Normal, "{}", self.assertion_context());
         assert_eq!(self.active_operator(), None, "{}", self.assertion_context());
+    }
+
+    pub fn shared_clipboard(&mut self) -> VimClipboard {
+        VimClipboard {
+            editor: self
+                .read_from_clipboard()
+                .map(|item| item.text().unwrap())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+pub struct VimClipboard {
+    editor: String,
+}
+
+impl VimClipboard {
+    #[track_caller]
+    pub fn assert_eq(&self, expected: &str) {
+        assert_eq!(self.editor, expected);
     }
 }
 
