@@ -3,7 +3,6 @@ use anyhow::Result;
 use gpui::{App, AppContext, AsyncApp, Global, Task, UpdateGlobal};
 use image::imageops::flip_horizontal;
 use std::sync::Arc;
-use uuid::uuid;
 
 /// Global registry for the AiMessageHandler
 #[derive(Default)]

@@ -546,48 +546,49 @@ impl LanguageModel for BedrockModel {
             LanguageModelCompletionError,
         >,
     > {
-        let Ok(region) = cx.read_entity(&self.state, |state, _cx| state.get_region()) else {
-            return async move { Err(anyhow::anyhow!("App State Dropped").into()) }.boxed();
-        };
-
-        let model_id = match self.model.cross_region_inference_id(&region) {
-            Ok(s) => s,
-            Err(e) => {
-                return async move { Err(e.into()) }.boxed();
-            }
-        };
-
-        let deny_tool_calls = request.tool_choice == Some(LanguageModelToolChoice::None);
-
-        let original_request = request.clone();
-
-        let request = match into_bedrock(
-            request,
-            model_id,
-            self.model.default_temperature(),
-            self.model.max_output_tokens(),
-            self.model.mode(),
-            self.model.supports_caching(),
-        ) {
-            Ok(request) => request,
-            Err(err) => return futures::future::ready(Err(err.into())).boxed(),
-        };
-
-        let request_future = self.stream_completion(request, cx);
-        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
-        let id = self.id.clone();
-        let future = self.request_limiter.stream(async move {
-            let response = request.await.map_err(|err| anyhow!(err))?;
-            let events = map_to_language_model_completion_events(response);
-
-            if deny_tool_calls {
-                Ok(deny_tool_use_events(events).boxed())
-            } else {
-                Ok(events.boxed())
-            }
-        });
-
-        async move { Ok(future.await?.boxed()) }.boxed()
+        // let Ok(region) = cx.read_entity(&self.state, |state, _cx| state.get_region()) else {
+        //     return async move { Err(anyhow::anyhow!("App State Dropped").into()) }.boxed();
+        // };
+        //
+        // let model_id = match self.model.cross_region_inference_id(&region) {
+        //     Ok(s) => s,
+        //     Err(e) => {
+        //         return async move { Err(e.into()) }.boxed();
+        //     }
+        // };
+        //
+        // let deny_tool_calls = request.tool_choice == Some(LanguageModelToolChoice::None);
+        //
+        // let original_request = request.clone();
+        //
+        // let request = match into_bedrock(
+        //     request,
+        //     model_id,
+        //     self.model.default_temperature(),
+        //     self.model.max_output_tokens(),
+        //     self.model.mode(),
+        //     self.model.supports_caching(),
+        // ) {
+        //     Ok(request) => request,
+        //     Err(err) => return futures::future::ready(Err(err.into())).boxed(),
+        // };
+        //
+        // let request_future = self.stream_completion(request, cx);
+        // let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        // let id = self.id.clone();
+        // let future = self.request_limiter.stream(async move {
+        //     let response = request.await.map_err(|err| anyhow!(err))?;
+        //     let events = map_to_language_model_completion_events(response);
+        //
+        //     if deny_tool_calls {
+        //         Ok(deny_tool_use_events(events).boxed())
+        //     } else {
+        //         Ok(events.boxed())
+        //     }
+        // });
+        //
+        // async move { Ok(future.await?.boxed()) }.boxed()
+        panic!("Don't care about bedrock!")
     }
 
     fn cache_configuration(&self) -> Option<LanguageModelCacheConfiguration> {

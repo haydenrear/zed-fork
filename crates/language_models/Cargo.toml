@@ -61,6 +61,7 @@ util.workspace = true
 vercel = { workspace = true, features = ["schemars"] }
 workspace-hack.workspace = true
 x_ai = { workspace = true, features = ["schemars"] }
+uuid = { version = "1.16.0", features = ["v4"] }
 
 [dev-dependencies]
 editor = { workspace = true, features = ["test-support"] }

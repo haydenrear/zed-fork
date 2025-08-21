@@ -14,12 +14,7 @@ use language_model::{
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
     LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent,
     LanguageModelToolSchemaFormat, LanguageModelToolUse, MessageContent, RateLimiter, RequestIds,
-    Role, StopReason, TokenUsage, get_message_handler_async,
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason, TokenUsage,
+    Role, StopReason, TokenUsage, get_message_handler_async
 };
 use menu;
 use open_ai::{ImageUrl, Model, ReasoningEffort, ResponseStreamEvent, stream_completion};

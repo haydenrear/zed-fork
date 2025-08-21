@@ -328,6 +328,8 @@ impl AiMessageHandler {
     ) -> Option<Message> {
         let response_metadata = Self::build_response_metadata(&language_model_args);
         match request_message {
+            LanguageModelCompletionEvent::RedactedThinking { .. } => None,
+            LanguageModelCompletionEvent::ToolUseJsonParseError { .. } => None,
             LanguageModelCompletionEvent::StatusUpdate { .. } => None,
             LanguageModelCompletionEvent::StartMessage { .. } => None,
             LanguageModelCompletionEvent::Text(text) => {

@@ -25,9 +25,8 @@ pub use crate::registry::*;
 pub use crate::request::*;
 pub use crate::role::*;
 pub use crate::telemetry::*;
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use anthropic::{AnthropicError, parse_prompt_too_long};
-use anyhow::{Result, anyhow};
 use client::Client;
 use cloud_llm_client::{CompletionMode, CompletionRequestStatus};
 use futures::FutureExt;
@@ -46,10 +45,6 @@ use std::{fmt, io};
 use thiserror::Error;
 use util::serde::is_default;
 use uuid;
-use zed_llm_client::{
-    CompletionRequestStatus, MODEL_REQUESTS_USAGE_AMOUNT_HEADER_NAME,
-    MODEL_REQUESTS_USAGE_LIMIT_HEADER_NAME, UsageLimit,
-};
 
 pub const ANTHROPIC_PROVIDER_ID: LanguageModelProviderId =
     LanguageModelProviderId::new("anthropic");

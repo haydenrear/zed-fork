@@ -8,12 +8,11 @@ use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelRequestTool, LanguageModelToolChoice, LanguageModelToolUse,
     LanguageModelToolUseId, RequestIds, StopReason, get_message_handler_async,
+    TokenUsage, LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider
 };
 use language_model::{
-    LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
-    LanguageModelRequest, MessageContent, RateLimiter, Role,
-    LanguageModelToolUseId, MessageContent, RateLimiter, Role, StopReason, TokenUsage,
+    LanguageModelRequest, MessageContent, RateLimiter, Role
 };
 use ollama::{
     ChatMessage, ChatOptions, ChatRequest, ChatResponseDelta, KeepAlive, OllamaFunctionTool,
