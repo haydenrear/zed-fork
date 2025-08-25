@@ -6,6 +6,9 @@ use context_server::ContextServerId;
 use gpui::{App, Context, Entity, SharedString, Task};
 use project::context_server_store::{ContextServerStatus, ContextServerStore};
 use std::sync::Arc;
+use serde_json::Value;
+use context_server::types::Notification;
+use context_server::types::notifications::ToolsListChanged;
 use util::ResultExt;
 
 pub struct ContextServerRegistry {
@@ -45,7 +48,7 @@ impl ContextServerRegistry {
             .map(|(id, server)| (id, &server.tools))
     }
 
-    fn reload_tools_for_server(&mut self, server_id: ContextServerId, cx: &mut Context<Self>) {
+    pub fn reload_tools_for_server(&mut self, server_id: ContextServerId, cx: &mut Context<Self>) {
         let Some(server) = self.server_store.read(cx).get_running_server(&server_id) else {
             return;
         };

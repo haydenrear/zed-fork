@@ -551,7 +551,7 @@ impl ThreadStore {
             project::context_server_store::Event::ServerStatusChanged { server_id, status } => {
                 match status {
                     ContextServerStatus::Starting => {}
-                    ContextServerStatus::Running => {
+                    ContextServerStatus::Running  => {
                         self.load_context_server_tools(server_id.clone(), context_server_store, cx);
                     }
                     ContextServerStatus::Stopped | ContextServerStatus::Error(_) => {

@@ -1,0 +1,353 @@
+13:27:33.058 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:27:33.115 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:27:33.144 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 8302 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:27:33.144 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:27:33.204 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 8297 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:27:33.204 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:27:35.105 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:27:35.119 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:27:35.282 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:27:35.293 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:27:36.479 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:27:36.503 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:27:36.504 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:27:36.504 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:27:37.134 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:27:37.137 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:27:37.315 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:27:37.557 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:27:37.565 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:27:37.567 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:27:37.567 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:27:38.174 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:27:38.186 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:27:38.451 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:27:40.198 [Thread-2] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Running docker shutdown hook for null
+13:27:40.198 [Thread-2] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Running docker shutdown hook for null
+13:27:40.217 [main] ERROR c.hayden.utilitymodule.result.Result - Found error java.lang.InterruptedException
+13:27:40.219 [main] ERROR c.hayden.utilitymodule.result.Result - Found error java.lang.InterruptedException
+13:27:40.303 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+13:27:40.303 [main] ERROR i.m.s.t.StdioServerTransportProvider - Failed to send notification: Failed to enqueue message
+13:27:40.304 [main] ERROR c.h.m.tool.McpSyncServerDelegate - Failed to enqueue message
+13:27:40.304 [main] ERROR i.m.s.t.StdioServerTransportProvider - Failed to send notification: Failed to enqueue message
+13:27:40.304 [main] WARN  o.s.c.a.AnnotationConfigApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'toolDecoratorService': Invocation of init method failed
+13:27:40.314 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+13:27:40.315 [main] ERROR i.m.s.t.StdioServerTransportProvider - Failed to send notification: Failed to enqueue message
+13:27:40.315 [main] ERROR c.h.m.tool.McpSyncServerDelegate - Failed to enqueue message
+13:27:40.315 [main] ERROR i.m.s.t.StdioServerTransportProvider - Failed to send notification: Failed to enqueue message
+13:27:40.316 [main] WARN  o.s.c.a.AnnotationConfigApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'toolDecoratorService': Invocation of init method failed
+13:28:10.437 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:28:10.565 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:28:10.627 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 9599 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:28:10.627 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:28:10.636 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 9604 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:28:10.637 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:28:11.994 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:28:12.005 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:28:12.289 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:28:12.298 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:28:13.012 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:28:13.033 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:28:13.035 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:28:13.036 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:28:13.214 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:28:13.251 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:28:13.252 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:28:13.252 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:28:13.326 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:28:13.328 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:28:13.395 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:28:13.579 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:28:13.583 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:28:13.709 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:28:23.399 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:28:23.715 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:28:29.151 [pool-10-thread-1] INFO  i.m.client.McpAsyncClient - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=CompletionCapabilities[], experimental=null, logging=LoggingCapabilities[], prompts=PromptCapabilities[listChanged=true], resources=ResourceCapabilities[subscribe=false, listChanged=true], tools=ToolCapabilities[listChanged=true]], Info: Implementation[name=stdio-mcp-server, version=1.0.0] and Instructions null
+13:28:29.218 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name parseAst
+13:28:29.474 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name findSymbolReferences
+13:28:29.475 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name extractSymbols
+13:28:29.475 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name zoomTrace
+13:28:29.478 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.parseAst
+13:28:29.478 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback parseAst
+13:28:29.478 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.findSymbolReferences
+13:28:29.479 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback findSymbolReferences
+13:28:29.479 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.extractSymbols
+13:28:29.479 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback extractSymbols
+13:28:29.479 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.zoomTrace
+13:28:29.479 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback zoomTrace
+13:28:29.894 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+13:28:29.909 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registering commit-diff-context-mcp
+13:28:29.956 [pool-10-thread-1] INFO  i.m.client.McpAsyncClient - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=CompletionCapabilities[], experimental=null, logging=LoggingCapabilities[], prompts=PromptCapabilities[listChanged=true], resources=ResourceCapabilities[subscribe=false, listChanged=true], tools=ToolCapabilities[listChanged=true]], Info: Implementation[name=stdio-mcp-server, version=1.0.0] and Instructions null
+13:28:30.124 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name parseAst
+13:28:30.525 [main] ERROR i.n.r.d.DnsServerAddressStreamProviders - Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
+13:28:30.694 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name findSymbolReferences
+13:28:30.698 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name extractSymbols
+13:28:30.698 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name zoomTrace
+13:28:30.702 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.parseAst
+13:28:30.703 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback parseAst
+13:28:30.703 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.findSymbolReferences
+13:28:30.703 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback findSymbolReferences
+13:28:30.704 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.extractSymbols
+13:28:30.704 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback extractSymbols
+13:28:30.704 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.zoomTrace
+13:28:30.704 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback zoomTrace
+13:28:30.875 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+13:28:30.954 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registering commit-diff-context-mcp
+13:28:31.211 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registered next build registration CodeBuildRegistration{registrationId='commit-diff-context-mcp',buildCommand='null',workingDirectory='null',description='null',arguments='null',timeoutSeconds='null',enabled='false',artifactPaths='[/Users/hayde/IdeaProjects/commit-diff-context-parent/commit-diff-context-mcp/build/libs/commit-diff-context-mcp.jar]',artifactOutputDirectory='null',executionType='null',error='null'}
+13:28:31.523 [main] ERROR i.n.r.d.DnsServerAddressStreamProviders - Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
+13:28:32.088 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registered next build registration CodeBuildRegistration{registrationId='commit-diff-context-mcp',buildCommand='null',workingDirectory='null',description='null',arguments='null',timeoutSeconds='null',enabled='false',artifactPaths='[/Users/hayde/IdeaProjects/commit-diff-context-parent/commit-diff-context-mcp/build/libs/commit-diff-context-mcp.jar]',artifactOutputDirectory='null',executionType='null',error='null'}
+13:28:33.401 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:28:33.716 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:28:33.950 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - Adding {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+13:28:33.950 [main] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 1 subscriber(s).
+13:28:33.951 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - started bean '_org.springframework.integration.errorLogger'
+13:28:33.962 [main] INFO  c.h.m.McpToolGatewayApplication - Started McpToolGatewayApplication in 24.482 seconds (process running for 25.574)
+13:28:33.964 [main] WARN  c.n.g.d.starter.LegacyStarterWarning - DEPRECATION WARNING - This project is using the deprecated 'graphql-dgs-spring-boot-starter'. Please switch to 'graphql-dgs-spring-graphql-starter'. For more context: https://netflix.github.io/dgs/spring-graphql-integration
+13:28:34.609 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - Adding {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+13:28:34.612 [main] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 1 subscriber(s).
+13:28:34.619 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - started bean '_org.springframework.integration.errorLogger'
+13:28:34.684 [main] INFO  c.h.m.McpToolGatewayApplication - Started McpToolGatewayApplication in 25.266 seconds (process running for 26.302)
+13:28:34.697 [main] WARN  c.n.g.d.starter.LegacyStarterWarning - DEPRECATION WARNING - This project is using the deprecated 'graphql-dgs-spring-boot-starter'. Please switch to 'graphql-dgs-spring-graphql-starter'. For more context: https://netflix.github.io/dgs/spring-graphql-integration
+13:28:43.401 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:28:43.711 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:28:53.401 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:28:53.713 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:29:03.399 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:29:03.711 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:29:16.080 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:29:16.269 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 11680 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:29:16.270 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:29:17.613 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:29:17.622 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:29:18.410 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:29:18.425 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:29:18.425 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:29:18.425 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:29:18.609 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:29:18.611 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:29:18.645 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:29:28.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:29:29.187 [pool-10-thread-1] INFO  i.m.client.McpAsyncClient - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=CompletionCapabilities[], experimental=null, logging=LoggingCapabilities[], prompts=PromptCapabilities[listChanged=true], resources=ResourceCapabilities[subscribe=false, listChanged=true], tools=ToolCapabilities[listChanged=true]], Info: Implementation[name=stdio-mcp-server, version=1.0.0] and Instructions null
+13:29:29.245 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name parseAst
+13:29:29.421 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name findSymbolReferences
+13:29:29.422 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name extractSymbols
+13:29:29.422 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name zoomTrace
+13:29:29.428 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.parseAst
+13:29:29.430 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback parseAst
+13:29:29.431 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.findSymbolReferences
+13:29:29.432 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback findSymbolReferences
+13:29:29.432 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.extractSymbols
+13:29:29.433 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback extractSymbols
+13:29:29.433 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.zoomTrace
+13:29:29.433 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback zoomTrace
+13:29:29.507 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+13:29:29.523 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registering commit-diff-context-mcp
+13:29:29.874 [main] ERROR i.n.r.d.DnsServerAddressStreamProviders - Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
+13:29:30.261 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registered next build registration CodeBuildRegistration{registrationId='commit-diff-context-mcp',buildCommand='null',workingDirectory='null',description='null',arguments='null',timeoutSeconds='null',enabled='false',artifactPaths='[/Users/hayde/IdeaProjects/commit-diff-context-parent/commit-diff-context-mcp/build/libs/commit-diff-context-mcp.jar]',artifactOutputDirectory='null',executionType='null',error='null'}
+13:29:31.650 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - Adding {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+13:29:31.650 [main] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 1 subscriber(s).
+13:29:31.650 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - started bean '_org.springframework.integration.errorLogger'
+13:29:31.662 [main] INFO  c.h.m.McpToolGatewayApplication - Started McpToolGatewayApplication in 16.103 seconds (process running for 17.395)
+13:29:31.663 [main] WARN  c.n.g.d.starter.LegacyStarterWarning - DEPRECATION WARNING - This project is using the deprecated 'graphql-dgs-spring-boot-starter'. Please switch to 'graphql-dgs-spring-graphql-starter'. For more context: https://netflix.github.io/dgs/spring-graphql-integration
+13:29:38.649 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:29:48.646 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:29:58.647 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:30:08.648 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:30:18.647 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:30:28.647 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:30:38.651 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:30:48.647 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:30:58.646 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:31:08.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:31:18.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:31:28.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:31:38.649 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:31:48.646 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:31:58.648 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:32:08.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:32:18.649 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:32:28.646 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:32:38.651 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:32:48.649 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:32:58.651 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:33:08.651 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:33:18.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:33:28.664 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:33:38.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:33:48.652 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:33:58.650 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:34:08.652 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:34:18.647 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:34:28.646 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:34:38.649 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:34:48.648 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:34:58.647 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:35:08.649 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:35:18.651 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:35:20.800 [Thread-13] INFO  c.h.m.c.ToolGatewayMcpToolConfig - Running shutdown hook.
+13:35:20.802 [Thread-13] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Stopping client replace-name - commit-diff-context-mcp
+13:35:20.811 [Thread-2] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Running docker shutdown hook for null
+13:35:22.911 [SpringApplicationShutdownHook] INFO  o.s.i.endpoint.EventDrivenConsumer - Removing {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+13:35:22.911 [SpringApplicationShutdownHook] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 0 subscriber(s).
+13:35:22.911 [SpringApplicationShutdownHook] INFO  o.s.i.endpoint.EventDrivenConsumer - stopped bean '_org.springframework.integration.errorLogger'
+13:35:22.919 [SpringApplicationShutdownHook] INFO  c.h.m.c.ToolGatewayMcpToolConfig - Running shutdown hook.
+13:35:22.919 [SpringApplicationShutdownHook] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Stopping client replace-name - commit-diff-context-mcp
+13:35:23.476 [ForkJoinPool.commonPool-worker-1] WARN  i.m.c.transport.StdioClientTransport - Process terminated with code 130
+13:35:23.476 [ForkJoinPool.commonPool-worker-2] WARN  i.m.c.transport.StdioClientTransport - Process terminated with code 130
+13:37:29.919 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:37:29.935 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:37:30.007 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 14724 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:37:30.008 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:37:30.047 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 14729 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:37:30.048 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:37:31.383 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:37:31.391 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:37:31.426 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:37:31.434 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:37:32.221 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:37:32.249 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:37:32.250 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:37:32.251 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:37:32.281 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:37:32.298 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:37:32.299 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:37:32.299 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:37:32.445 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:37:32.447 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:37:32.506 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:37:32.507 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:37:32.628 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:37:32.709 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:37:48.657 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+13:37:48.799 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 16047 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+13:37:48.800 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+13:37:52.472 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+13:37:52.486 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+13:37:54.677 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+13:37:54.769 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+13:37:54.770 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+13:37:54.770 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+13:37:55.357 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+13:37:55.362 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+13:37:55.618 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+13:38:05.624 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:38:15.627 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:38:16.849 [pool-10-thread-1] INFO  i.m.client.McpAsyncClient - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=CompletionCapabilities[], experimental=null, logging=LoggingCapabilities[], prompts=PromptCapabilities[listChanged=true], resources=ResourceCapabilities[subscribe=false, listChanged=true], tools=ToolCapabilities[listChanged=true]], Info: Implementation[name=stdio-mcp-server, version=1.0.0] and Instructions null
+13:38:16.952 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name parseAst
+13:38:17.164 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name findSymbolReferences
+13:38:17.165 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name extractSymbols
+13:38:17.165 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name zoomTrace
+13:38:17.183 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.parseAst
+13:38:17.197 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback parseAst
+13:38:17.198 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.findSymbolReferences
+13:38:17.198 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback findSymbolReferences
+13:38:17.198 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.extractSymbols
+13:38:17.198 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback extractSymbols
+13:38:17.200 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.zoomTrace
+13:38:17.201 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback zoomTrace
+13:38:17.322 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+13:38:17.417 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registering commit-diff-context-mcp
+13:38:18.020 [main] ERROR i.n.r.d.DnsServerAddressStreamProviders - Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
+13:38:18.641 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registered next build registration CodeBuildRegistration{registrationId='commit-diff-context-mcp',buildCommand='null',workingDirectory='null',description='null',arguments='null',timeoutSeconds='null',enabled='false',artifactPaths='[/Users/hayde/IdeaProjects/commit-diff-context-parent/commit-diff-context-mcp/build/libs/commit-diff-context-mcp.jar]',artifactOutputDirectory='null',executionType='null',error='null'}
+13:38:20.346 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - Adding {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+13:38:20.347 [main] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 1 subscriber(s).
+13:38:20.347 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - started bean '_org.springframework.integration.errorLogger'
+13:38:20.357 [main] INFO  c.h.m.McpToolGatewayApplication - Started McpToolGatewayApplication in 32.83 seconds (process running for 34.622)
+13:38:20.358 [main] WARN  c.n.g.d.starter.LegacyStarterWarning - DEPRECATION WARNING - This project is using the deprecated 'graphql-dgs-spring-boot-starter'. Please switch to 'graphql-dgs-spring-graphql-starter'. For more context: https://netflix.github.io/dgs/spring-graphql-integration
+13:38:25.623 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:38:35.622 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:38:45.625 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:38:55.623 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:39:05.624 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:39:15.620 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:39:25.621 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:39:35.623 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:39:45.622 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+13:39:51.551 [Thread-13] INFO  c.h.m.c.ToolGatewayMcpToolConfig - Running shutdown hook.
+13:39:51.551 [Thread-13] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Stopping client replace-name - commit-diff-context-mcp
+13:39:51.551 [Thread-2] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Running docker shutdown hook for null
+13:39:53.646 [SpringApplicationShutdownHook] INFO  o.s.i.endpoint.EventDrivenConsumer - Removing {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+13:39:53.647 [SpringApplicationShutdownHook] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 0 subscriber(s).
+13:39:53.647 [SpringApplicationShutdownHook] INFO  o.s.i.endpoint.EventDrivenConsumer - stopped bean '_org.springframework.integration.errorLogger'
+13:39:53.653 [SpringApplicationShutdownHook] INFO  c.h.m.c.ToolGatewayMcpToolConfig - Running shutdown hook.
+13:39:53.654 [SpringApplicationShutdownHook] INFO  c.h.u.d.DynamicMcpToolCallbackProvider - Stopping client replace-name - commit-diff-context-mcp
+13:39:54.161 [ForkJoinPool.commonPool-worker-1] WARN  i.m.c.transport.StdioClientTransport - Process terminated with code 130
+13:39:54.161 [ForkJoinPool.commonPool-worker-2] WARN  i.m.c.transport.StdioClientTransport - Process terminated with code 130
+14:05:15.198 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+14:05:15.215 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+14:05:15.297 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 18549 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+14:05:15.298 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+14:05:15.419 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 18544 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+14:05:15.420 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+14:05:17.318 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+14:05:17.332 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+14:05:17.362 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+14:05:17.372 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+14:05:18.517 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+14:05:18.531 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+14:05:18.553 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+14:05:18.555 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+14:05:18.555 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+14:05:18.562 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+14:05:18.562 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+14:05:18.563 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+14:05:18.817 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+14:05:18.818 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+14:05:18.883 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+14:05:18.885 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+14:05:18.990 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+14:05:19.026 [main] ERROR c.hayden.utilitymodule.result.Result - Found error Shutdown in progress
+14:05:19.101 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+14:05:19.139 [main] ERROR c.hayden.utilitymodule.result.Result - Found error Shutdown in progress
+14:05:19.157 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+14:05:19.201 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registering commit-diff-context-mcp
+14:05:19.252 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+14:05:19.288 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registering commit-diff-context-mcp
+14:05:19.620 [main] ERROR i.n.r.d.DnsServerAddressStreamProviders - Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
+14:05:19.681 [main] ERROR i.n.r.d.DnsServerAddressStreamProviders - Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
+14:05:20.019 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registered next build registration CodeBuildRegistration{registrationId='commit-diff-context-mcp',buildCommand='null',workingDirectory='null',description='null',arguments='null',timeoutSeconds='null',enabled='false',artifactPaths='[/Users/hayde/IdeaProjects/commit-diff-context-parent/commit-diff-context-mcp/build/libs/commit-diff-context-mcp.jar]',artifactOutputDirectory='null',executionType='null',error='null'}
+14:05:20.032 [main] WARN  o.s.c.a.AnnotationConfigApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'mcpToolShutdown' defined in class path resource [com/hayden/mcptoolgateway/config/ToolGatewayMcpToolConfig.class]: Failed to instantiate [org.springframework.boot.CommandLineRunner]: Factory method 'mcpToolShutdown' threw exception with message: Shutdown in progress
+14:05:20.163 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registered next build registration CodeBuildRegistration{registrationId='commit-diff-context-mcp',buildCommand='null',workingDirectory='null',description='null',arguments='null',timeoutSeconds='null',enabled='false',artifactPaths='[/Users/hayde/IdeaProjects/commit-diff-context-parent/commit-diff-context-mcp/build/libs/commit-diff-context-mcp.jar]',artifactOutputDirectory='null',executionType='null',error='null'}
+14:05:20.175 [main] WARN  o.s.c.a.AnnotationConfigApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'mcpToolShutdown' defined in class path resource [com/hayden/mcptoolgateway/config/ToolGatewayMcpToolConfig.class]: Failed to instantiate [org.springframework.boot.CommandLineRunner]: Factory method 'mcpToolShutdown' threw exception with message: Shutdown in progress
+14:05:45.597 [background-preinit] INFO  o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.2.Final
+14:05:45.690 [main] INFO  c.h.m.McpToolGatewayApplication - Starting McpToolGatewayApplication v1.0.0 using Java 21.0.7 with PID 19997 (/Users/hayde/IdeaProjects/commit-diff-context-parent/mcp-tool-gateway/build/libs/mcp-tool-gateway.jar started by hayde in /Users/hayde/IdeaProjects/zed)
+14:05:45.691 [main] INFO  c.h.m.McpToolGatewayApplication - The following 1 profile is active: "prod"
+14:05:47.394 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'errorChannel' has been explicitly defined. Therefore, a default PublishSubscribeChannel will be created.
+14:05:47.402 [main] INFO  o.s.i.c.DefaultConfiguringBeanFactoryPostProcessor - No bean named 'integrationHeaderChannelRegistry' has been explicitly defined. Therefore, a default DefaultHeaderChannelRegistry will be created.
+14:05:48.241 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable tools capabilities, notification: true
+14:05:48.271 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable resources capabilities, notification: true
+14:05:48.272 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable prompts capabilities, notification: true
+14:05:48.273 [main] INFO  o.s.a.m.s.a.McpServerAutoConfiguration - Enable completions capabilities
+14:05:48.508 [pool-3-thread-1] INFO  i.m.server.McpAsyncServer - Client initialize request - Protocol: 2025-03-26, Capabilities: ClientCapabilities[experimental=null, roots=null, sampling=null], Info: Implementation[name=Zed, version=0.1.0]
+14:05:48.518 [pool-3-thread-1] WARN  i.m.server.McpAsyncServer - Client requested unsupported protocol version: 2025-03-26, so the server will suggest the 2024-11-05 version instead
+14:05:48.586 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Initializing scheduled task
+14:05:58.590 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:06:01.967 [pool-10-thread-1] INFO  i.m.client.McpAsyncClient - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=CompletionCapabilities[], experimental=null, logging=LoggingCapabilities[], prompts=PromptCapabilities[listChanged=true], resources=ResourceCapabilities[subscribe=false, listChanged=true], tools=ToolCapabilities[listChanged=true]], Info: Implementation[name=stdio-mcp-server, version=1.0.0] and Instructions null
+14:06:02.024 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name parseAst
+14:06:02.226 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name findSymbolReferences
+14:06:02.227 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name extractSymbols
+14:06:02.228 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Getting tool name for service replace-name - commit-diff-context-mcp, tool name zoomTrace
+14:06:02.231 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.parseAst
+14:06:02.231 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback parseAst
+14:06:02.232 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.findSymbolReferences
+14:06:02.232 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback findSymbolReferences
+14:06:02.233 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.extractSymbols
+14:06:02.233 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback extractSymbols
+14:06:02.233 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - commit-diff-context-mcp.zoomTrace
+14:06:02.233 [main] INFO  c.h.mcptoolgateway.tool.SetClients - Adding new toolfor callback zoomTrace
+14:06:02.340 [main] INFO  c.h.m.tool.McpSyncServerDelegate - Adding tool to sync server - redeploy-mcp-server
+14:06:02.350 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registering commit-diff-context-mcp
+14:06:02.621 [main] ERROR i.n.r.d.DnsServerAddressStreamProviders - Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
+14:06:02.960 [main] INFO  c.h.m.f.FunctionCallingGraphqlRedeploy - Registered next build registration CodeBuildRegistration{registrationId='commit-diff-context-mcp',buildCommand='null',workingDirectory='null',description='null',arguments='null',timeoutSeconds='null',enabled='false',artifactPaths='[/Users/hayde/IdeaProjects/commit-diff-context-parent/commit-diff-context-mcp/build/libs/commit-diff-context-mcp.jar]',artifactOutputDirectory='null',executionType='null',error='null'}
+14:06:04.282 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - Adding {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+14:06:04.283 [main] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 1 subscriber(s).
+14:06:04.283 [main] INFO  o.s.i.endpoint.EventDrivenConsumer - started bean '_org.springframework.integration.errorLogger'
+14:06:04.298 [main] INFO  c.h.m.McpToolGatewayApplication - Started McpToolGatewayApplication in 19.156 seconds (process running for 20.215)
+14:06:04.299 [main] WARN  c.n.g.d.starter.LegacyStarterWarning - DEPRECATION WARNING - This project is using the deprecated 'graphql-dgs-spring-boot-starter'. Please switch to 'graphql-dgs-spring-graphql-starter'. For more context: https://netflix.github.io/dgs/spring-graphql-integration
+14:06:08.588 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:06:18.587 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:06:28.588 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:06:38.592 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:06:48.588 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:06:58.592 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:07:08.591 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
