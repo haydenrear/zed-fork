@@ -1,7 +1,7 @@
 mod postgres;
 mod registry;
 
-use crate::{LanguageModelId, RequestIds};
+use crate::{LanguageModelId, RateLimiter, RequestIds};
 use futures::{Stream, StreamExt};
 
 use crate::{
@@ -14,6 +14,10 @@ pub use postgres::PostgresDatabaseClient;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
+use ratelimit::Ratelimiter;
+use schemars::_private::NoSerialize;
 // pub use example::run_message_handler_example;
 pub use registry::{
     MessageHandlerConfig, MessageHandlerRegistry, create_conversation_id, get_message_handler,
@@ -200,6 +204,46 @@ where
         stream
     } else {
         stream
+    }
+}
+
+pub struct TokenRateLimiter {
+    rate_limiter: ratelimit::Ratelimiter,
+    response_tokens_hint: u64
+}
+
+impl TokenRateLimiter {
+    pub fn new(duration: Duration, max_tokens: u64) -> Self {
+        Self {
+            rate_limiter: Ratelimiter::builder(max_tokens, duration).build().unwrap(),
+            response_tokens_hint: max_tokens / 16
+        }
+    }
+
+    pub fn limit(&self, request: &LanguageModelRequest) {
+        if let Some(r) = request.maybe_to_value() && let Some(s) = r.as_str(){
+            self.rate_limit_ser(s);
+
+            for _ in 0..self.response_tokens_hint {
+                if let Err(e) = self.rate_limiter.try_wait() {
+                    sleep(e);
+                }
+            }
+        }
+    }
+
+    fn rate_limit_ser(&self, s: &str) {
+        s.split(" ").for_each(|f| {
+            if let Err(e) = self.rate_limiter.try_wait() {
+                sleep(e);
+            }
+        });
+    }
+
+    pub fn register_response(&self, request_message: &LanguageModelCompletionEvent) {
+        if let Some(r) = request_message.maybe_to_value() && let Some(s) = r.as_str() {
+            self.rate_limit_ser(s);
+        }
     }
 }
 

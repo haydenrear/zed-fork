@@ -66,6 +66,7 @@ impl ContextServerRegistry {
                     tools: BTreeMap::default(),
                     load_tools: Task::ready(Ok(())),
                 });
+
         registered_server.load_tools = cx.spawn(async move |this, cx| {
             let response = client
                 .request::<context_server::types::requests::ListTools>(())

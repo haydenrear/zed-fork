@@ -7,7 +7,7 @@ use futures::Stream;
 use futures::{FutureExt, StreamExt, future::BoxFuture};
 use gpui::{AnyView, App, AsyncApp, Context, Entity, Subscription, Task, Window};
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db, TokenRateLimiter};
 use language_model::{
     _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
     LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
@@ -24,6 +24,7 @@ use settings::{Settings, SettingsStore};
 use std::pin::Pin;
 use std::str::FromStr as _;
 use std::sync::Arc;
+use std::time::Duration;
 use strum::IntoEnumIterator;
 
 use ui::{ElevationIndex, List, Tooltip, prelude::*};
@@ -159,7 +160,8 @@ impl OpenAiLanguageModelProvider {
             model,
             state: self.state.clone(),
             http_client: self.http_client.clone(),
-            request_limiter: RateLimiter::new(4),
+            request_limiter: RateLimiter::new(1),
+            token_limiter: Arc::new(TokenRateLimiter::new(Duration::from_secs(60), 800_000))
         })
     }
 }
@@ -256,6 +258,7 @@ pub struct OpenAiLanguageModel {
     state: gpui::Entity<State>,
     http_client: Arc<dyn HttpClient>,
     request_limiter: RateLimiter,
+    token_limiter: Arc<TokenRateLimiter>,
 }
 
 impl OpenAiLanguageModel {
@@ -391,6 +394,8 @@ impl LanguageModel for OpenAiLanguageModel {
         );
         let id = self.id.clone();
         let completions = self.stream_completion(request, cx);
+        self.token_limiter.limit(&original_request);
+        let t = self.token_limiter.clone();
         async move {
             if let Some(handler) = &message_handler {
                 handler
@@ -406,12 +411,18 @@ impl LanguageModel for OpenAiLanguageModel {
             let stream = mapper.map_stream(completions.await?);
 
             Ok(peek_db(
-                stream,
-                message_handler,
-                ids,
-                LanguageModelArgs::from_request(id, &original_request),
-            )
-            .boxed())
+                    stream,
+                    message_handler,
+                    ids,
+                    LanguageModelArgs::from_request(id, &original_request),
+                )
+                .inspect(move |f| {
+                    if let Ok(s) = f {
+                        t.register_response(s);
+                    }
+
+                })
+                .boxed())
         }
         .boxed()
     }

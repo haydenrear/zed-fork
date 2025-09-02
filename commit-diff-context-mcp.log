@@ -4790,3 +4790,9 @@ Caused by: org.hibernate.NonUniqueObjectException: A different object with the s
 14:06:02.763 [main] INFO  c.h.c.CommitDiffContextMcpApplication - Started CommitDiffContextMcpApplication in 12.802 seconds (process running for 14.106)
 14:06:02.764 [main] WARN  c.n.g.d.starter.LegacyStarterWarning - DEPRECATION WARNING - This project is using the deprecated 'graphql-dgs-spring-boot-starter'. Please switch to 'graphql-dgs-spring-graphql-starter'. For more context: https://netflix.github.io/dgs/spring-graphql-integration
 14:06:27.691 [virtual-55] INFO  c.h.c.index.PathIndexService - Indexing 21609 files.
+14:07:48.484 [SpringApplicationShutdownHook] INFO  o.s.i.endpoint.EventDrivenConsumer - Removing {logging-channel-adapter:_org.springframework.integration.errorLogger} as a subscriber to the 'errorChannel' channel
+14:07:48.484 [SpringApplicationShutdownHook] INFO  o.s.i.c.PublishSubscribeChannel - Channel 'application.errorChannel' has 0 subscriber(s).
+14:07:48.484 [SpringApplicationShutdownHook] INFO  o.s.i.endpoint.EventDrivenConsumer - stopped bean '_org.springframework.integration.errorLogger'
+14:07:48.497 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+14:07:48.498 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+14:07:48.501 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.

@@ -351,3 +351,6 @@
 14:06:48.588 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
 14:06:58.592 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
 14:07:08.591 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:07:18.589 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:07:28.592 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
+14:07:38.591 [pool-9-thread-1] INFO  c.h.mcptoolgateway.tool.SetClients - Starting scheduled task
