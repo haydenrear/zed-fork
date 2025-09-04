@@ -208,14 +208,14 @@ where
 }
 
 pub struct TokenRateLimiter {
-    rate_limiter: ratelimit::Ratelimiter,
+    rate_limiter: Ratelimiter,
     response_tokens_hint: u64
 }
 
 impl TokenRateLimiter {
     pub fn new(duration: Duration, max_tokens: u64) -> Self {
         Self {
-            rate_limiter: Ratelimiter::builder(max_tokens, duration).build().unwrap(),
+            rate_limiter: Ratelimiter::builder(max_tokens, duration).max_tokens(max_tokens).build().unwrap(),
             response_tokens_hint: max_tokens / 16
         }
     }
@@ -235,6 +235,7 @@ impl TokenRateLimiter {
     fn rate_limit_ser(&self, s: &str) {
         s.split(" ").for_each(|f| {
             if let Err(e) = self.rate_limiter.try_wait() {
+                log::info!("Sleeping for {}.", &e.as_secs());
                 sleep(e);
             }
         });
