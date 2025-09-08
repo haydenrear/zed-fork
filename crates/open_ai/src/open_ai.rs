@@ -479,6 +479,11 @@ pub async fn stream_completion(
 
         let reset_token_header = response.headers().get("x-ratelimit-reset-tokens");
 
+        if response.status().is_success()  {
+            response_opt = Some(response);
+            break;
+        }
+
         if let Some(h) = reset_token_header && let Ok(u) = h.to_str() {
 
             log::info!("Hit rate limit {} - trying again.", u);
@@ -586,13 +591,33 @@ pub async fn stream_completion(
 
 
 fn parse_duration(s: &str) -> Option<(u64, u64)> {
+    let out = strip_extra(s);
     let re = Regex::new(r"(?:(\d+)m)?(?:(\d+)s)?").unwrap();
-    if let Some(caps) = re.captures(s) {
+    if let Some(caps) = re.captures(out.as_str()) {
         let minutes = caps.get(1).map_or(0, |m| m.as_str().parse().unwrap_or(0));
         let seconds = caps.get(2).map_or(0, |s| s.as_str().parse().unwrap_or(0));
         return Some((minutes, seconds));
     }
     None
+}
+
+fn strip_extra(s: &str) -> String {
+    let mut to_wait_duration_str = String::from(s);
+    for r in vec!["ms", "ns"] {
+        let res = Regex::new(format!(r"(\d+){}", r).as_str());
+        if let Ok(re) = res {
+            let captured = re.captures(s);
+            if let Some(capture) = captured {
+                if capture.len() > 0 {
+                    let found = capture.get(0).unwrap().as_str();;
+                    let string = to_wait_duration_str.replace(found, "");
+                    to_wait_duration_str = string;
+                }
+            }
+        }
+    }
+
+    to_wait_duration_str
 }
 
 #[test]
@@ -608,6 +633,18 @@ fn test_parse_duration() {
     let p = parse_duration("1s");
     assert_eq!(p, Some((0, 1)));
     let p = parse_duration("1m");
+    assert_eq!(p, Some((1, 0)));
+    let p = parse_duration("0ms5m0s");
+    assert_eq!(p, Some((5, 0)));
+    let p = parse_duration("1ms5m3s");
+    assert_eq!(p, Some((5, 3)));
+    let p = parse_duration("0ms0m3s");
+    assert_eq!(p, Some((0, 3)));
+    let p = parse_duration("1ms0m0s");
+    assert_eq!(p, Some((0, 0)));
+    let p = parse_duration("1ms1s");
+    assert_eq!(p, Some((0, 1)));
+    let p = parse_duration("1ms1m");
     assert_eq!(p, Some((1, 0)));
 }
 
