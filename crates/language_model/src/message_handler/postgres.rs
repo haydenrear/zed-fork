@@ -128,7 +128,7 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
 }
 
 impl DatabaseClient for PostgresDatabaseClient {
-    async fn save_append_messages(&self, message: Vec<Message>, ids: &RequestIds) {
+    async fn save_append_messages_async(&self, message: Vec<Message>, ids: &RequestIds) {
         let message_clone = message.clone();
         let pool = self.pool.clone();
 
@@ -146,13 +146,41 @@ impl DatabaseClient for PostgresDatabaseClient {
             let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(ids, json, task_path))
                 .execute(&*pool.unwrap())
                 .await;
-
             if let Err(e) = sql_res {
                 log::error!("Found sql err {}!", &e);
             }
         } else if let Err(e) = &message_json_res {
             log::error!("Found err: {}", &e);
         }
+    }
+    fn save_append_messages(&self, message: Vec<Message>, ids: &RequestIds) {
+        let message_clone = message.clone();
+        let pool = self.pool.clone();
+
+        if pool.as_ref().is_none() {
+            log::error!("Database pool is not initialized");
+            return;
+        }
+
+
+        let task_path = Self::_parse_task_path(&message);
+
+        let message_json_res = serde_json::to_string(&message_clone);
+
+        let cloned_ids = ids.clone();
+
+        smol::spawn(async move {
+            if let Ok(json) = &message_json_res {
+                let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(&cloned_ids, json, task_path))
+                    .execute(&*pool.unwrap())
+                    .await;
+                if let Err(e) = sql_res {
+                    log::error!("Found sql err {}!", &e);
+                }
+            } else if let Err(e) = &message_json_res {
+                log::error!("Found err: {}", &e);
+            }
+        }).detach();
     }
 }
 

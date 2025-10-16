@@ -14,11 +14,6 @@ pub use crate::message_handler::{
     Message as AiMessageContent, MessageType, get_message_handler_async,
 };
 use serde_json;
-use std::collections::HashMap;
-
-use crate::message_handler::{
-    AiMessageHandler, MessageHandlerConfig, init_message_handler, peek_db,
-};
 pub use crate::model::*;
 pub use crate::rate_limiter::*;
 pub use crate::registry::*;
@@ -44,6 +39,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, io};
+use agent_client_protocol::SessionId;
 use thiserror::Error;
 use util::serde::is_default;
 use uuid;
@@ -83,6 +79,16 @@ pub struct RequestIds {
     pub checkpoint_id: String,
     pub session_id: String,
     pub prompt_id: String,
+}
+
+pub fn _retrieve_ids_from(request: &SessionId, title: String) -> RequestIds {
+    let r = request.0.to_string();
+    RequestIds {
+        thread_id: r.to_string(),
+        checkpoint_id: r.to_string(),
+        session_id: r.to_string(),
+        prompt_id: title,
+    }
 }
 
 pub fn _retrieve_ids(request: &LanguageModelRequest) -> RequestIds {

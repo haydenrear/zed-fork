@@ -1,8 +1,9 @@
 mod postgres;
 mod registry;
 
-use crate::{LanguageModelId, RateLimiter, RequestIds};
-use futures::{Stream, StreamExt};
+use crate::{LanguageModelId, RequestIds};
+use agent_client_protocol::{self as acp, Annotations, ContentBlock, Plan, SessionUpdate};
+use futures::{Stream, StreamExt, TryFutureExt};
 
 use crate::{
     LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelRequest,
@@ -11,13 +12,14 @@ use crate::{
 use enum_fields::EnumFields;
 use gpui::Global;
 pub use postgres::PostgresDatabaseClient;
+use ratelimit::Ratelimiter;
+use schemars::_private::NoSerialize;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
-use ratelimit::Ratelimiter;
-use schemars::_private::NoSerialize;
+use serde_json::Value;
 // pub use example::run_message_handler_example;
 pub use registry::{
     MessageHandlerConfig, MessageHandlerRegistry, create_conversation_id, get_message_handler,
@@ -144,7 +146,8 @@ pub enum Message {
 
 /// Interface for database operations
 pub trait DatabaseClient: Send + Sync {
-    async fn save_append_messages(&self, message: Vec<Message>, ids: &RequestIds);
+    fn save_append_messages(&self, message: Vec<Message>, ids: &RequestIds);
+    async fn save_append_messages_async(&self, message: Vec<Message>, ids: &RequestIds);
 }
 
 /// Message handler for interfacing with LangGraph and database storage
@@ -209,19 +212,24 @@ where
 
 pub struct TokenRateLimiter {
     rate_limiter: Ratelimiter,
-    response_tokens_hint: u64
+    response_tokens_hint: u64,
 }
 
 impl TokenRateLimiter {
     pub fn new(duration: Duration, max_tokens: u64) -> Self {
         Self {
-            rate_limiter: Ratelimiter::builder(max_tokens, duration).max_tokens(max_tokens).build().unwrap(),
-            response_tokens_hint: max_tokens / 16
+            rate_limiter: Ratelimiter::builder(max_tokens, duration)
+                .max_tokens(max_tokens)
+                .build()
+                .unwrap(),
+            response_tokens_hint: max_tokens / 16,
         }
     }
 
     pub fn limit(&self, request: &LanguageModelRequest) {
-        if let Some(r) = request.maybe_to_value() && let Some(s) = r.as_str(){
+        if let Some(r) = request.maybe_to_value()
+            && let Some(s) = r.as_str()
+        {
             self.rate_limit_ser(s);
 
             for _ in 0..self.response_tokens_hint {
@@ -233,7 +241,7 @@ impl TokenRateLimiter {
     }
 
     fn rate_limit_ser(&self, s: &str) {
-        s.split(" ").for_each(|f| {
+        s.split(" ").for_each(|_| {
             if let Err(e) = self.rate_limiter.try_wait() {
                 log::info!("Sleeping for {}.", &e.as_secs());
                 sleep(e);
@@ -242,7 +250,9 @@ impl TokenRateLimiter {
     }
 
     pub fn register_response(&self, request_message: &LanguageModelCompletionEvent) {
-        if let Some(r) = request_message.maybe_to_value() && let Some(s) = r.as_str() {
+        if let Some(r) = request_message.maybe_to_value()
+            && let Some(s) = r.as_str()
+        {
             self.rate_limit_ser(s);
         }
     }
@@ -266,7 +276,13 @@ impl AiMessageHandler {
                 Self::map_from_completion_request(r, ids, &language_model_args).into_iter()
             })
             .collect::<Vec<Message>>();
-        let _ = self.save_append_messages(collected, ids).await;
+        let _ = self.save_append_messages_async(collected, ids).await;
+    }
+
+    pub fn save_acp(&self, update: &acp::SessionUpdate, ids: &RequestIds) {
+        if let Some(msg) = Self::map_from_acp(update, ids) {
+            let _ = self.save_append_messages(vec![msg], ids);
+        }
     }
 
     pub async fn save_completion_event(
@@ -280,7 +296,7 @@ impl AiMessageHandler {
             &ids.checkpoint_id,
             language_model_args,
         ) {
-            let _ = self.save_append_messages(vec![msg], ids).await;
+            let _ = self.save_append_messages_async(vec![msg], ids).await;
         }
     }
 
@@ -366,6 +382,149 @@ impl AiMessageHandler {
         }
     }
 
+    pub fn map_from_acp(update: &acp::SessionUpdate, id: &RequestIds) -> Option<Message> {
+        match update {
+            SessionUpdate::UserMessageChunk { content } => match content {
+                ContentBlock::Text(t) => {
+                    Some(Message::Human {
+                        content: ContentValue::new(t.text.to_string()),
+                        id: id.thread_id.to_string(),
+                        name: Some("ZedIdeAgent".to_string()),
+                        example: false,
+                        additional_kwargs: Default::default(),
+                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone()),
+                    })
+                },
+                _ => None,
+            },
+            SessionUpdate::AgentMessageChunk { content } => match content {
+                ContentBlock::Text(t) => {
+                    Some(Message::Ai {
+                        content: ContentValue::new(t.text.to_string()),
+                        id: id.thread_id.to_string(),
+                        name: Some("ZedIdeAgent".to_string()),
+                        example: false,
+                        invalid_tool_calls: None,
+                        tool_calls: None,
+                        additional_kwargs: Default::default(),
+                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone()),
+                    })
+                },
+                _ => None,
+            },
+            SessionUpdate::AgentThoughtChunk { content } => match content {
+                ContentBlock::Text(t) => {
+                    let mut additional_kwargs = HashMap::new();
+                    additional_kwargs.insert(
+                        "thinking".to_string(),
+                        serde_json::Value::String(t.text.to_string()),
+                    );
+                    Some(Message::Ai {
+                        content: ContentValue::new(String::default()),
+                        id: id.thread_id.to_string(),
+                        name: Some("ZedIdeAgent".to_string()),
+                        example: false,
+                        invalid_tool_calls: None,
+                        tool_calls: None,
+                        additional_kwargs,
+                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone()),
+                    })
+                }
+                _ => None,
+            },
+            SessionUpdate::ToolCall(tc) => {
+                let mut additional_kwargs = HashMap::new();
+                if let Some(raw_input) = &tc.raw_input {
+                    additional_kwargs.insert("raw_input".to_string(), raw_input.clone());
+                }
+                if let Some(raw_output) = &tc.raw_output {
+                    additional_kwargs.insert("raw_output".to_string(), raw_output.clone());
+                }
+
+                let content = match serde_json::to_string(&tc.raw_input) {
+                    Ok(content) => content,
+                    Err(_) => String::default(),
+                };
+
+                Some(Message::Tool {
+                    content: ContentValue::new(content),
+                    id: id.thread_id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    tool_call_id: Some(tc.id.0.to_string()),
+                    tool_name: Some(tc.title.to_string()),
+                    additional_kwargs,
+                    response_metadata: Self::_create_acp_response_metadata(tc.meta.clone()),
+                })
+            }
+            SessionUpdate::ToolCallUpdate(tcu) => {
+                let mut additional_kwargs = HashMap::new();
+                if let Some(status) = &tcu.fields.status {
+                    additional_kwargs.insert(
+                        "status".to_string(),
+                        serde_json::Value::String(format!("{:?}", status)),
+                    );
+                }
+
+                Some(Message::Tool {
+                    content: ContentValue::new(String::default()),
+                    id: id.thread_id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    tool_call_id: Some(tcu.id.0.to_string()),
+                    tool_name: Some(tcu.id.0.to_string()),
+                    additional_kwargs,
+                    response_metadata: Self::_create_acp_response_metadata(tcu.meta.clone()),
+                })
+            }
+            SessionUpdate::Plan(p) => {
+                let plan_entry = p.entries.iter()
+                    .flat_map(|s| {
+                        s.maybe_to_value()
+                            .into_iter()
+                            .flat_map(|s| s.as_str().map(|f| f.to_string()).into_iter())
+                    })
+                    .collect::<Vec<String>>();
+
+                let r = Self::_create_acp_response_metadata(p.meta.clone());
+
+                Some(Message::Ai {
+                    content: ContentValue::Multiple(plan_entry),
+                    id: id.session_id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    invalid_tool_calls: None,
+                    tool_calls: None,
+                    additional_kwargs: Default::default(),
+                    response_metadata: r,
+                })
+            },
+            SessionUpdate::AvailableCommandsUpdate { .. } => None,
+            SessionUpdate::CurrentModeUpdate { .. } => None,
+        }
+    }
+
+    fn _create_annotations(option: Option<Annotations>) -> HashMap<String, Value> {
+        let mut r = HashMap::new();
+        // option
+        //     .and_then(|f| f.as_str().map(|s| s.to_string()))
+        //     .and_then(|f| {
+        //         r.insert("meta".to_string(), f);
+        //     });
+        r
+    }
+
+    fn _create_acp_response_metadata(option: Option<Value>) -> HashMap<String, Value> {
+        let mut r = HashMap::new();
+        option.and_then(|f| f.as_str().map(|s| s.to_string()))
+            .and_then(|f| {
+                r.insert("meta".to_string(), Value::String(f))
+            });
+
+        r.insert("acp".into(), Value::String("true".into()));
+        r
+    }
+
     pub fn map_from_completion_event(
         request_message: &LanguageModelCompletionEvent,
         thread_id: &str,
@@ -385,7 +544,7 @@ impl AiMessageHandler {
                     additional_kwargs: HashMap::new(),
                     response_metadata,
                 })
-            },
+            }
             LanguageModelCompletionEvent::ToolUseJsonParseError { .. } => None,
             LanguageModelCompletionEvent::StatusUpdate { .. } => None,
             LanguageModelCompletionEvent::StartMessage { .. } => None,
@@ -474,13 +633,25 @@ impl AiMessageHandler {
     }
 
     /// Save a message to the database
-    pub async fn save_append_messages(
+    pub fn save_append_messages(
         &self,
         messages: Vec<Message>,
         ids: &RequestIds,
     ) -> anyhow::Result<()> {
         if let Some(ref db_client) = self.database_client {
-            db_client.save_append_messages(messages, ids).await;
+            db_client.save_append_messages(messages, ids);
+        }
+        Ok(())
+    }
+
+    /// Save a message to the database
+    pub async fn save_append_messages_async(
+        &self,
+        messages: Vec<Message>,
+        ids: &RequestIds,
+    ) -> anyhow::Result<()> {
+        if let Some(ref db_client) = self.database_client {
+            db_client.save_append_messages_async(messages, ids).await;
         }
         Ok(())
     }
@@ -503,8 +674,7 @@ impl AiMessageHandler {
             if let Ok(res) = result {
                 let res = res.clone();
                 smol::spawn(async move {
-                    arc.save_completion_event(&res, &ids, &language_model_args)
-                        .await;
+                    arc.save_completion_event(&res, &ids, &language_model_args).await;
                 })
                 .detach();
             }

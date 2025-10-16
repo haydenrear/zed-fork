@@ -17,11 +17,11 @@ use task::{Shell, ShellBuilder};
 pub use terminal::*;
 
 use action_log::ActionLog;
-use agent_client_protocol::{self as acp};
+use agent_client_protocol::{self as acp, SessionId};
 use anyhow::{Context as _, Result, anyhow};
 use editor::Bias;
 use futures::{FutureExt, channel::oneshot, future::BoxFuture};
-use gpui::{AppContext, AsyncApp, Context, Entity, EventEmitter, SharedString, Task, WeakEntity};
+use gpui::{AppContext, AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, SharedString, Task, WeakEntity};
 use itertools::Itertools;
 use language::{Anchor, Buffer, BufferSnapshot, LanguageRegistry, Point, ToPoint, text_diff};
 use markdown::Markdown;
@@ -37,6 +37,8 @@ use std::{fmt::Display, mem, path::PathBuf, sync::Arc};
 use ui::App;
 use util::{ResultExt, get_default_system_shell_preferring_bash};
 use uuid::Uuid;
+use language_model::{_retrieve_ids, get_message_handler_async, AiMessageContent, _retrieve_ids_from};
+use language_model::message_handler::{init_message_handler, AiMessageHandler, MessageHandlerConfig, MessageHandlerRegistry, PostgresDatabaseClient};
 
 #[derive(Debug)]
 pub struct UserMessage {
@@ -777,6 +779,7 @@ pub struct RetryStatus {
 pub struct AcpThread {
     title: SharedString,
     entries: Vec<AgentThreadEntry>,
+    ai_message_handler: Arc<AiMessageHandler>,
     plan: Plan,
     project: Entity<Project>,
     action_log: Entity<ActionLog>,
@@ -995,6 +998,13 @@ impl AcpThread {
             }
         });
 
+        let connection_string = "postgresql://postgres:postgres@localhost:5488/postgres".to_string();
+
+        let db_client = smol::block_on(PostgresDatabaseClient::new(&connection_string))
+            .unwrap();
+
+        let g = AiMessageHandler::new(Some(Arc::new(db_client)));
+
         Self {
             action_log,
             shared_buffers: Default::default(),
@@ -1011,6 +1021,7 @@ impl AcpThread {
             terminals: HashMap::default(),
             pending_terminal_output: HashMap::default(),
             pending_terminal_exit: HashMap::default(),
+            ai_message_handler: Arc::new(g)
         }
     }
 
@@ -1090,6 +1101,8 @@ impl AcpThread {
         update: acp::SessionUpdate,
         cx: &mut Context<Self>,
     ) -> Result<(), acp::Error> {
+        self.ai_message_handler.save_acp(&update.clone(),  &_retrieve_ids_from(&self.session_id.clone(), self.title.to_string()));
+
         match update {
             acp::SessionUpdate::UserMessageChunk { content } => {
                 self.push_user_content_block(None, content, cx);
@@ -1116,7 +1129,9 @@ impl AcpThread {
                 cx.emit(AcpThreadEvent::ModeUpdated(current_mode_id))
             }
         }
+
         Ok(())
+
     }
 
     pub fn push_user_content_block(
