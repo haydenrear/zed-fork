@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub use settings::{AnthropicAvailableModel as AvailableModel, ModelMode};
 use strum::{EnumIter, EnumString};
 use thiserror::Error;
+use log::log;
 
 pub const ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
 
@@ -82,6 +83,11 @@ pub enum Model {
         alias = "claude-sonnet-4-5-thinking-latest"
     )]
     ClaudeSonnet4_5Thinking,
+    #[serde(
+        rename = "claude-haiku-4-5",
+        alias = "claude-haiku-4-5-20251001"
+    )]
+    ClaudeHaiku4_5,
     #[serde(rename = "claude-3-7-sonnet", alias = "claude-3-7-sonnet-latest")]
     Claude3_7Sonnet,
     #[serde(
@@ -120,10 +126,11 @@ pub enum Model {
 
 impl Model {
     pub fn default_fast() -> Self {
-        Self::Claude3_5Haiku
+        Self::ClaudeHaiku4_5
     }
 
     pub fn from_id(id: &str) -> Result<Self> {
+        println!("Checking ID {}", id);
         if id.starts_with("claude-opus-4-1-thinking") {
             return Ok(Self::ClaudeOpus4_1Thinking);
         }
@@ -180,6 +187,10 @@ impl Model {
             return Ok(Self::Claude3Sonnet);
         }
 
+        if id.starts_with("claude-4-5-haiku") || id.starts_with("claude-haiku-4-5") {
+            return Ok(Self::ClaudeHaiku4_5);
+        }
+
         if id.starts_with("claude-3-haiku") {
             return Ok(Self::Claude3Haiku);
         }
@@ -205,6 +216,7 @@ impl Model {
             Self::Claude3Sonnet => "claude-3-sonnet-20240229",
             Self::Claude3Haiku => "claude-3-haiku-20240307",
             Self::Custom { name, .. } => name,
+            Self::ClaudeHaiku4_5 => "claude-haiku-4-5-20251001",
         }
     }
 
@@ -222,6 +234,7 @@ impl Model {
             Self::Claude3Sonnet => "claude-3-sonnet-20240229",
             Self::Claude3Haiku => "claude-3-haiku-20240307",
             Self::Custom { name, .. } => name,
+            Self::ClaudeHaiku4_5 => "claude-haiku-4-5-20251001"
         }
     }
 
@@ -242,6 +255,7 @@ impl Model {
             Self::Claude3Opus => "Claude 3 Opus",
             Self::Claude3Sonnet => "Claude 3 Sonnet",
             Self::Claude3Haiku => "Claude 3 Haiku",
+            Self::ClaudeHaiku4_5 => "Claude 4.5 Haiku",
             Self::Custom {
                 name, display_name, ..
             } => display_name.as_ref().unwrap_or(name),
@@ -251,6 +265,7 @@ impl Model {
     pub fn cache_configuration(&self) -> Option<AnthropicModelCacheConfiguration> {
         match self {
             Self::ClaudeOpus4
+            | Self::ClaudeHaiku4_5
             | Self::ClaudeOpus4_1
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
@@ -279,6 +294,7 @@ impl Model {
         match self {
             Self::ClaudeOpus4
             | Self::ClaudeOpus4_1
+            | Self::ClaudeHaiku4_5
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
             | Self::ClaudeSonnet4
@@ -299,6 +315,7 @@ impl Model {
     pub fn max_output_tokens(&self) -> u64 {
         match self {
             Self::ClaudeOpus4
+            | Self::ClaudeHaiku4_5
             | Self::ClaudeOpus4_1
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
@@ -320,6 +337,7 @@ impl Model {
     pub fn default_temperature(&self) -> f32 {
         match self {
             Self::ClaudeOpus4
+            | Self::ClaudeHaiku4_5
             | Self::ClaudeOpus4_1
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
@@ -344,6 +362,7 @@ impl Model {
     pub fn mode(&self) -> AnthropicModelMode {
         match self {
             Self::ClaudeOpus4
+            | Self::ClaudeHaiku4_5
             | Self::ClaudeOpus4_1
             | Self::ClaudeSonnet4
             | Self::ClaudeSonnet4_5
