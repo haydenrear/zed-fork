@@ -4,15 +4,18 @@ use futures::Stream;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use gpui::{AnyView, App, AsyncApp, Context, Entity, Subscription, Task};
 use http_client::HttpClient;
+use language_model::{_retrieve_ids, get_message_handler_async};
 use language_model::{
     AuthenticateError, LanguageModelCompletionError, LanguageModelCompletionEvent,
     LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
     StopReason, TokenUsage,
 };
+
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
     LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
-    LanguageModelRequest, RateLimiter, Role,
+    LanguageModelRequest, RateLimiter, RequestIds, Role,
 };
 use lmstudio::{ModelType, get_models};
 pub use settings::LmStudioAvailableModel as AvailableModel;
@@ -22,6 +25,7 @@ use std::str::FromStr;
 use std::{collections::BTreeMap, sync::Arc};
 use ui::{ButtonLike, Indicator, List, prelude::*};
 use util::ResultExt;
+use uuid::uuid;
 
 use crate::AllLanguageModelSettings;
 use crate::ui::InstructionListItem;
@@ -463,11 +467,29 @@ impl LanguageModel for LmStudioLanguageModel {
             LanguageModelCompletionError,
         >,
     > {
+        let original_request = request.clone();
+        let ids = _retrieve_ids(&original_request);
         let request = self.to_lmstudio_request(request);
         let completions = self.stream_completion(request, cx);
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        let id = self.id.clone();
         async move {
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
+            }
             let mapper = LmStudioEventMapper::new();
-            Ok(mapper.map_stream(completions.await?).boxed())
+            Ok(peek_db(
+                mapper.map_stream(completions.await?).boxed(),
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &original_request),
+            ))
         }
         .boxed()
     }

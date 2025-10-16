@@ -1,8 +1,8 @@
-mod create_file_parser;
 mod edit_parser;
 #[cfg(test)]
 mod evals;
 mod streaming_fuzzy_matcher;
+mod create_file_parser;
 
 use crate::{Template, Templates};
 use action_log::ActionLog;
@@ -721,6 +721,7 @@ impl EditAgent {
         let request = LanguageModelRequest {
             thread_id: conversation.thread_id,
             prompt_id: conversation.prompt_id,
+            session_id: conversation.session_id,
             intent: Some(intent),
             mode: conversation.mode,
             messages: conversation.messages,

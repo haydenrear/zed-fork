@@ -8,6 +8,7 @@ pub mod tool_use;
 
 pub use context::{AgentContext, ContextId, ContextLoadResult};
 pub use context_store::ContextStore;
+use language_model::message_handler::{init_message_handler, MessageHandlerConfig};
 use fs::Fs;
 use std::sync::Arc;
 pub use thread::{

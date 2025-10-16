@@ -3,12 +3,14 @@ use collections::HashMap;
 use futures::{FutureExt, Stream, StreamExt, future, future::BoxFuture};
 use gpui::{AnyView, App, AsyncApp, Context, Entity, SharedString, Task};
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolSchemaFormat,
-    LanguageModelToolUse, MessageContent, RateLimiter, Role, StopReason, TokenUsage,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent,
+    LanguageModelToolUse, MessageContent, RateLimiter, RequestIds, Role, StopReason, TokenUsage,
+    get_message_handler_async, LanguageModelToolSchemaFormat
 };
 use open_router::{
     Model, ModelMode as OpenRouterModelMode, OPEN_ROUTER_API_URL, ResponseStreamEvent, list_models,
@@ -23,6 +25,7 @@ use util::{ResultExt, truncate_and_trailoff};
 use zed_env_vars::{EnvVar, env_var};
 
 use crate::{api_key::ApiKeyState, ui::InstructionListItem};
+use uuid::uuid;
 
 const PROVIDER_ID: LanguageModelProviderId = LanguageModelProviderId::new("openrouter");
 const PROVIDER_NAME: LanguageModelProviderName = LanguageModelProviderName::new("OpenRouter");
@@ -375,13 +378,42 @@ impl LanguageModel for OpenRouterLanguageModel {
             LanguageModelCompletionError,
         >,
     > {
+        let original_request = request.clone();
+        let ids = _retrieve_ids(&original_request);
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
         let request = into_open_router(request, &self.model, self.max_output_tokens());
-        let request = self.stream_completion(request, cx);
+        let completions = self.stream_completion(request, cx);
+        let id = self.id.clone();
         let future = self.request_limiter.stream(async move {
-            let response = request.await?;
-            Ok(OpenRouterEventMapper::new().map_stream(response))
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
+            }
+
+            let mapper = OpenRouterEventMapper::new();
+            let stream = mapper.map_stream(completions.await?);
+
+            Ok(peek_db(
+                stream,
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &original_request),
+            )
+            .boxed())
         });
-        async move { Ok(future.await?.boxed()) }.boxed()
+        async move {
+            Ok(future.await?.boxed())
+        }
+        .boxed()
     }
 }
 

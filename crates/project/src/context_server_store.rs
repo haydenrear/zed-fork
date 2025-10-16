@@ -7,7 +7,10 @@ use anyhow::{Context as _, Result};
 use collections::{HashMap, HashSet};
 use context_server::{ContextServer, ContextServerCommand, ContextServerId};
 use futures::{FutureExt as _, future::join_all};
-use gpui::{App, AsyncApp, Context, Entity, EventEmitter, Subscription, Task, WeakEntity, actions};
+use serde_json::Value;
+use context_server::types::Notification;
+use context_server::types::notifications::ToolsListChanged;
+use gpui::{App, AsyncApp, Context, Entity, EventEmitter, Subscription, Task, WeakEntity, actions, AppContext};
 use registry::ContextServerDescriptorRegistry;
 use settings::{Settings as _, SettingsStore};
 use util::{ResultExt as _, rel_path::RelPath};
@@ -402,12 +405,30 @@ impl ContextServerStore {
             self.stop_server(&id, cx).log_err();
         }
 
+        let e: Entity<ContextServerStore> = cx.entity();
         let task = cx.spawn({
             let id = server.id();
             let server = server.clone();
             let configuration = configuration.clone();
+            let store_for_handler = e.clone();
             async move |this, cx| {
-                match server.clone().start(cx).await {
+                let store_for_handler = store_for_handler.clone();
+                let config = configuration.clone();
+                let id_ = id.clone();
+                match server.clone()
+                    .start_with_handlers(vec![(ToolsListChanged::METHOD, Box::new(move |v: Value, app| {
+                        let store_for_handler = store_for_handler.clone();
+                        let config = config.clone();
+                        let id_ = id_.clone();
+                        app.update(|cx: &mut App| {
+                            // Emit a typed store event so agent2’s registry subscriber runs
+                            store_for_handler.update(cx, |store, cx| {
+                                let c = store.get_running_server(&id_).unwrap();
+                                store.update_server_state(id_, ContextServerState::Running { server: c, configuration: config }, cx);
+                            });
+                        });
+                    }))], cx)
+                    .await {
                     Ok(_) => {
                         debug_assert!(server.client().is_some());
 
@@ -439,6 +460,7 @@ impl ContextServerStore {
                         .log_err()
                     }
                 };
+
             }
         });
 

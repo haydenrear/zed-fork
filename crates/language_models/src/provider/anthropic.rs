@@ -2,17 +2,20 @@ use anthropic::{
     ANTHROPIC_API_URL, AnthropicError, AnthropicModelMode, ContentDelta, Event, ResponseContent,
     ToolResultContent, ToolResultPart, Usage,
 };
+
 use anyhow::{Result, anyhow};
 use collections::{BTreeMap, HashMap};
 use futures::{FutureExt, Stream, StreamExt, future, future::BoxFuture, stream::BoxStream};
 use gpui::{AnyView, App, AsyncApp, Context, Entity, Task};
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, ConfigurationViewTargetAgent, LanguageModel,
+    _retrieve_ids, AuthenticateError, ConfigurationViewTargetAgent, LanguageModel,
     LanguageModelCacheConfiguration, LanguageModelCompletionError, LanguageModelId,
     LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
     LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolResultContent, MessageContent, RateLimiter, Role,
+    LanguageModelToolResultContent, MessageContent, RateLimiter, RequestIds, Role,
+    get_message_handler_async,
 };
 use language_model::{LanguageModelCompletionEvent, LanguageModelToolUse, StopReason};
 use settings::{Settings, SettingsStore};
@@ -29,6 +32,7 @@ use crate::api_key::ApiKeyState;
 use crate::ui::InstructionListItem;
 
 pub use settings::AnthropicAvailableModel as AvailableModel;
+use uuid::uuid;
 
 const PROVIDER_ID: LanguageModelProviderId = language_model::ANTHROPIC_PROVIDER_ID;
 const PROVIDER_NAME: LanguageModelProviderName = language_model::ANTHROPIC_PROVIDER_NAME;
@@ -408,6 +412,13 @@ impl LanguageModel for AnthropicModel {
             LanguageModelCompletionError,
         >,
     > {
+        let ids = _retrieve_ids(&request);
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        let request_to_save = request.clone();
+
         let request = into_anthropic(
             request,
             self.model.request_id().into(),
@@ -416,9 +427,31 @@ impl LanguageModel for AnthropicModel {
             self.model.mode(),
         );
         let request = self.stream_completion(request, cx);
+        let id = self.id.clone();
         let future = self.request_limiter.stream(async move {
+            // Save request messages if handler is available
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &request_to_save,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &request_to_save),
+                    )
+                    .await;
+            }
+
             let response = request.await?;
-            Ok(AnthropicEventMapper::new().map_stream(response))
+
+            let mapper = AnthropicEventMapper::new();
+            let stream = mapper.map_stream(response);
+
+            Ok(peek_db(
+                stream,
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &request_to_save),
+            )
+            .boxed())
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

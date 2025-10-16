@@ -5,6 +5,7 @@ use client::{Client, UserStore};
 use collections::HashSet;
 use gpui::{App, Context, Entity};
 use language_model::{LanguageModelProviderId, LanguageModelRegistry};
+use language_model::message_handler::{init_message_handler, MessageHandlerConfig};
 use provider::deepseek::DeepSeekLanguageModelProvider;
 
 mod api_key;
@@ -104,6 +105,9 @@ fn register_language_model_providers(
     client: Arc<Client>,
     cx: &mut Context<LanguageModelRegistry>,
 ) {
+    smol::spawn(init_message_handler(MessageHandlerConfig { postgres_connection_string: None, enable_storage: true }, cx))
+        .detach();
+
     registry.register_provider(
         Arc::new(CloudLanguageModelProvider::new(
             user_store,

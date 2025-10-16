@@ -19,6 +19,7 @@ mod terminal_tool;
 mod thinking_tool;
 mod ui;
 mod web_search_tool;
+mod a2a_agents_toool;
 
 use assistant_tool::ToolRegistry;
 use copy_path_tool::CopyPathTool;

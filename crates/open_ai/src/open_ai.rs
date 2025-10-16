@@ -1,11 +1,16 @@
 use anyhow::{Context as _, Result, anyhow};
 use futures::{AsyncBufReadExt, AsyncReadExt, StreamExt, io::BufReader, stream::BoxStream};
-use http_client::{AsyncBody, HttpClient, Method, Request as HttpRequest};
+use http_client::{AsyncBody, HttpClient, Method, Request as HttpRequest, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub use settings::OpenAiReasoningEffort as ReasoningEffort;
 use std::{convert::TryFrom, future::Future};
+use std::thread::sleep;
+use std::time::Duration;
+use futures_timer::Delay;
 use strum::EnumIter;
+use http_client::http::request::Builder;
+use regex::Regex;
 
 pub const OPEN_AI_API_URL: &str = "https://api.openai.com/v1";
 
@@ -448,15 +453,75 @@ pub async fn stream_completion(
     api_key: &str,
     request: Request,
 ) -> Result<BoxStream<'static, Result<ResponseStreamEvent>>> {
-    let uri = format!("{api_url}/chat/completions");
-    let request_builder = HttpRequest::builder()
-        .method(Method::POST)
-        .uri(uri)
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", api_key.trim()));
 
-    let request = request_builder.body(AsyncBody::from(serde_json::to_string(&request)?))?;
-    let mut response = client.send(request).await?;
+    let mut response_opt =  None;
+    loop {
+        let uri = format!("{api_url}/chat/completions");
+        let request_builder = HttpRequest::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", api_key.trim()));
+
+        let result = serde_json::to_string(&request)?;
+        let async_body = AsyncBody::from(result);
+        let requested = request_builder.body(async_body)?;
+        let mut response = client.send(requested).await?;
+
+        let reset_token_header = response.headers().get("x-ratelimit-reset-tokens");
+
+        if response.status().is_success()  {
+            response_opt = Some(response);
+            break;
+        }
+
+        if let Some(h) = reset_token_header && let Ok(u) = h.to_str() {
+
+            log::info!("Hit rate limit {} - trying again.", u);
+
+            let mut total_secs = 0;
+
+            if let Some((m, s)) = parse_duration(u) {
+                total_secs += m * 60;
+                total_secs += s;
+            } else {
+                log::info!("Could not parse rate limit {}.", u);
+                response_opt = Some(response);
+                break;
+            }
+
+            log::info!("Found total secs {} on open ai header.", total_secs);
+
+            if total_secs <= 0 {
+                response_opt = Some(response);
+                break;
+            }
+
+            log::info!("Waiting {} for rate limit, then trying again.", &total_secs);
+            Delay::new(Duration::from_secs(total_secs)).await;
+            log::info!("Running rate limit again after {} seconds.", &total_secs);
+
+        } else {
+            if !response.status().is_success() {
+                log::info!("Found error in open ai response but could not read rate limiting err, {}",
+                    response.headers()
+                        .iter()
+                        .map(|s| {
+                            if let Ok(v)  = s.1.to_str() {
+                                format!("{}: {}", s.0.as_str(), v)
+                            } else {
+                                format!("{}", s.0.as_str())
+                            }
+                        })
+                        .collect::<Vec<String>>().join(", "));
+            }
+            response_opt = Some(response);
+            break;
+        }
+    }
+
+    let mut response = response_opt.unwrap();
+
     if response.status().is_success() {
         let reader = BufReader::new(response.into_body());
         Ok(reader
@@ -513,6 +578,65 @@ pub async fn stream_completion(
             ),
         }
     }
+}
+
+
+fn parse_duration(s: &str) -> Option<(u64, u64)> {
+    let out = strip_extra(s);
+    let re = Regex::new(r"(?:(\d+)m)?(?:(\d+)s)?").unwrap();
+    if let Some(caps) = re.captures(out.as_str()) {
+        let minutes = caps.get(1).map_or(0, |m| m.as_str().parse().unwrap_or(0));
+        let seconds = caps.get(2).map_or(0, |s| s.as_str().parse().unwrap_or(0));
+        return Some((minutes, seconds));
+    }
+    None
+}
+
+fn strip_extra(s: &str) -> String {
+    let mut to_wait_duration_str = String::from(s);
+    for r in vec!["ms", "ns"] {
+        let res = Regex::new(format!(r"(\d+){}", r).as_str());
+        if let Ok(re) = res {
+            let captured = re.captures(s);
+            if let Some(capture) = captured {
+                if capture.len() > 0 {
+                    let found = capture.get(0).unwrap().as_str();;
+                    let string = to_wait_duration_str.replace(found, "");
+                    to_wait_duration_str = string;
+                }
+            }
+        }
+    }
+
+    to_wait_duration_str
+}
+
+#[test]
+fn test_parse_duration() {
+    let p = parse_duration("5m0s");
+    assert_eq!(p, Some((5, 0)));
+    let p = parse_duration("5m3s");
+    assert_eq!(p, Some((5, 3)));
+    let p = parse_duration("0m3s");
+    assert_eq!(p, Some((0, 3)));
+    let p = parse_duration("0m0s");
+    assert_eq!(p, Some((0, 0)));
+    let p = parse_duration("1s");
+    assert_eq!(p, Some((0, 1)));
+    let p = parse_duration("1m");
+    assert_eq!(p, Some((1, 0)));
+    let p = parse_duration("0ms5m0s");
+    assert_eq!(p, Some((5, 0)));
+    let p = parse_duration("1ms5m3s");
+    assert_eq!(p, Some((5, 3)));
+    let p = parse_duration("0ms0m3s");
+    assert_eq!(p, Some((0, 3)));
+    let p = parse_duration("1ms0m0s");
+    assert_eq!(p, Some((0, 0)));
+    let p = parse_duration("1ms1s");
+    assert_eq!(p, Some((0, 1)));
+    let p = parse_duration("1ms1m");
+    assert_eq!(p, Some((1, 0)));
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize)]

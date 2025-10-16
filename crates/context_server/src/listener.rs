@@ -19,6 +19,7 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
 };
+use log::info;
 use util::ResultExt;
 
 use crate::{
@@ -29,6 +30,8 @@ use crate::{
         requests::{CallTool, ListTools},
     },
 };
+use crate::types::Notification;
+use crate::types::notifications::ToolsListChanged;
 
 pub struct McpServer {
     socket_path: PathBuf,

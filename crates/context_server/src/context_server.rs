@@ -133,6 +133,9 @@ impl ContextServer {
     pub fn stop(&self) -> Result<()> {
         let mut client = self.client.write();
         if let Some(protocol) = client.take() {
+            if self.id.0.contains("deployable-zoom-search")  {
+                log::info!("Stopping deployable zoom search smartly.");
+            }
             drop(protocol);
         }
         Ok(())

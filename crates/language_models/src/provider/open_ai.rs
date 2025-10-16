@@ -1,15 +1,18 @@
+use crate::{AllLanguageModelSettings, ui::InstructionListItem};
 use anyhow::{Result, anyhow};
 use collections::{BTreeMap, HashMap};
 use futures::Stream;
 use futures::{FutureExt, StreamExt, future, future::BoxFuture};
 use gpui::{AnyView, App, AsyncApp, Context, Entity, SharedString, Task, Window};
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db, TokenRateLimiter};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason, TokenUsage,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent,
+    LanguageModelToolSchemaFormat, LanguageModelToolUse, MessageContent, RateLimiter, RequestIds,
+    Role, StopReason, TokenUsage, get_message_handler_async
 };
 use menu;
 use open_ai::{
@@ -19,13 +22,15 @@ use settings::{OpenAiAvailableModel as AvailableModel, Settings, SettingsStore};
 use std::pin::Pin;
 use std::str::FromStr as _;
 use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 use strum::IntoEnumIterator;
 use ui::{ElevationIndex, List, Tooltip, prelude::*};
 use ui_input::SingleLineInput;
+use uuid::uuid;
 use util::{ResultExt, truncate_and_trailoff};
 use zed_env_vars::{EnvVar, env_var};
 
-use crate::{api_key::ApiKeyState, ui::InstructionListItem};
+use crate::{api_key::ApiKeyState};
 
 const PROVIDER_ID: LanguageModelProviderId = language_model::OPEN_AI_PROVIDER_ID;
 const PROVIDER_NAME: LanguageModelProviderName = language_model::OPEN_AI_PROVIDER_NAME;
@@ -98,7 +103,8 @@ impl OpenAiLanguageModelProvider {
             model,
             state: self.state.clone(),
             http_client: self.http_client.clone(),
-            request_limiter: RateLimiter::new(4),
+            request_limiter: RateLimiter::new(1),
+            token_limiter: Arc::new(TokenRateLimiter::new(Duration::from_secs(60), 800_000))
         })
     }
 
@@ -206,6 +212,7 @@ pub struct OpenAiLanguageModel {
     state: Entity<State>,
     http_client: Arc<dyn HttpClient>,
     request_limiter: RateLimiter,
+    token_limiter: Arc<TokenRateLimiter>,
 }
 
 impl OpenAiLanguageModel {
@@ -324,6 +331,14 @@ impl LanguageModel for OpenAiLanguageModel {
             LanguageModelCompletionError,
         >,
     > {
+        let original_request = request.clone();
+        let ids = _retrieve_ids(&original_request);
+
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        // Save request messages if handler is available
+
         let request = into_open_ai(
             request,
             self.model.id(),
@@ -332,10 +347,37 @@ impl LanguageModel for OpenAiLanguageModel {
             self.max_output_tokens(),
             self.model.reasoning_effort(),
         );
+        let id = self.id.clone();
         let completions = self.stream_completion(request, cx);
+        self.token_limiter.limit(&original_request);
+        let t = self.token_limiter.clone();
         async move {
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &original_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &original_request),
+                    )
+                    .await;
+            }
+
             let mapper = OpenAiEventMapper::new();
-            Ok(mapper.map_stream(completions.await?).boxed())
+            let stream = mapper.map_stream(completions.await?);
+
+            Ok(peek_db(
+                    stream,
+                    message_handler,
+                    ids,
+                    LanguageModelArgs::from_request(id, &original_request),
+                )
+                .inspect(move |f| {
+                    if let Ok(s) = f {
+                        t.register_response(s);
+                    }
+
+                })
+                .boxed())
         }
         .boxed()
     }
@@ -886,6 +928,7 @@ mod tests {
         let request = LanguageModelRequest {
             thread_id: None,
             prompt_id: None,
+            session_id: None,
             intent: None,
             mode: None,
             messages: vec![LanguageModelRequestMessage {

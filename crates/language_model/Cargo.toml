@@ -16,6 +16,8 @@ doctest = false
 test-support = []
 
 [dependencies]
+sqlx = { version = "0.8.0", features = ["runtime-async-std-native-tls", "postgres"]  }
+chrono = "0.4.41"
 anthropic = { workspace = true, features = ["schemars"] }
 open_router.workspace = true
 anyhow.workspace = true
@@ -40,7 +42,10 @@ smol.workspace = true
 telemetry_events.workspace = true
 thiserror.workspace = true
 util.workspace = true
+ratelimit = "0.10.0"
 workspace-hack.workspace = true
+enum-fields = "0.1.0"
+uuid = { version = "1.16.0", features = ["v4"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

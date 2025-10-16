@@ -24,5 +24,7 @@ log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 settings.workspace = true
+futures-timer = "3"
 strum.workspace = true
 workspace-hack.workspace = true
+regex = "1.11.1"

@@ -1870,6 +1870,7 @@ impl Thread {
             stop: Vec::new(),
             temperature: AgentSettings::temperature_for_model(model, cx),
             thinking_allowed: true,
+            session_id: None
         };
 
         log::debug!("Completion request built successfully");

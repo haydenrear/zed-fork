@@ -5,11 +5,28 @@ mod request;
 mod role;
 mod telemetry;
 
+pub mod message_handler;
+
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake_provider;
 
+pub use crate::message_handler::{
+    Message as AiMessageContent, MessageType, get_message_handler_async,
+};
+use serde_json;
+use std::collections::HashMap;
+
+use crate::message_handler::{
+    AiMessageHandler, MessageHandlerConfig, init_message_handler, peek_db,
+};
+pub use crate::model::*;
+pub use crate::rate_limiter::*;
+pub use crate::registry::*;
+pub use crate::request::*;
+pub use crate::role::*;
+pub use crate::telemetry::*;
+use anyhow::{Context as _, Result, anyhow};
 use anthropic::{AnthropicError, parse_prompt_too_long};
-use anyhow::{Result, anyhow};
 use client::Client;
 use cloud_llm_client::{CompletionMode, CompletionRequestStatus};
 use futures::FutureExt;
@@ -29,13 +46,7 @@ use std::time::Duration;
 use std::{fmt, io};
 use thiserror::Error;
 use util::serde::is_default;
-
-pub use crate::model::*;
-pub use crate::rate_limiter::*;
-pub use crate::registry::*;
-pub use crate::request::*;
-pub use crate::role::*;
-pub use crate::telemetry::*;
+use uuid;
 
 pub const ANTHROPIC_PROVIDER_ID: LanguageModelProviderId =
     LanguageModelProviderId::new("anthropic");
@@ -64,6 +75,36 @@ pub fn init(client: Arc<Client>, cx: &mut App) {
 
 pub fn init_settings(cx: &mut App) {
     registry::init(cx);
+}
+
+#[derive(Debug, Clone)]
+pub struct RequestIds {
+    pub thread_id: String,
+    pub checkpoint_id: String,
+    pub session_id: String,
+    pub prompt_id: String,
+}
+
+pub fn _retrieve_ids(request: &LanguageModelRequest) -> RequestIds {
+    let session_id = request
+        .session_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let thread_id = request
+        .thread_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let prompt_id = request
+        .prompt_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    RequestIds {
+        thread_id: session_id.clone(),
+        checkpoint_id: uuid::Uuid::new_v4().to_string(),
+        session_id: thread_id,
+        prompt_id,
+    }
 }
 
 /// A completion event from a language model.
@@ -613,8 +654,10 @@ pub trait LanguageModel: Send + Sync {
             let stream = futures::stream::iter(first_item_text.map(Ok))
                 .chain(events.filter_map({
                     let last_token_usage = last_token_usage.clone();
+
                     move |result| {
                         let last_token_usage = last_token_usage.clone();
+
                         async move {
                             match result {
                                 Ok(LanguageModelCompletionEvent::StatusUpdate { .. }) => None,

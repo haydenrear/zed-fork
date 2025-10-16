@@ -4,12 +4,14 @@ use fs::Fs;
 use futures::{FutureExt, Stream, StreamExt, future, future::BoxFuture, stream::BoxStream};
 use gpui::{AnyView, App, AsyncApp, Context, Entity, Global, SharedString, Task, Window};
 use http_client::HttpClient;
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, LanguageModelToolResultContent, LanguageModelToolUse, MessageContent,
-    RateLimiter, Role, StopReason, TokenUsage,
+    _retrieve_ids, AuthenticateError, LanguageModel, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolResultContent,
+    LanguageModelToolUse, MessageContent, RateLimiter, RequestIds, Role, StopReason, TokenUsage,
+    get_message_handler_async
 };
 use mistral::{CODESTRAL_API_URL, MISTRAL_API_URL, StreamResponse};
 pub use settings::MistralAvailableModel as AvailableModel;
@@ -382,13 +384,34 @@ impl LanguageModel for MistralLanguageModel {
             LanguageModelCompletionError,
         >,
     > {
+        // Get message handler for saving messages
+        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+
+        let prev_request = request.clone();
+        let ids = _retrieve_ids(&prev_request);
+
         let request = into_mistral(request, self.model.clone(), self.max_output_tokens());
         let stream = self.stream_completion(request, cx);
 
+        let id = self.id.clone();
         async move {
+            if let Some(handler) = &message_handler {
+                handler
+                    .save_completion_req(
+                        &prev_request,
+                        &ids,
+                        LanguageModelArgs::from_request(id.clone(), &prev_request),
+                    )
+                    .await;
+            }
             let stream = stream.await?;
             let mapper = MistralEventMapper::new();
-            Ok(mapper.map_stream(stream).boxed())
+            Ok(peek_db(
+                mapper.map_stream(stream).boxed(),
+                message_handler,
+                ids,
+                LanguageModelArgs::from_request(id, &prev_request),
+            ))
         }
         .boxed()
     }
@@ -1060,6 +1083,11 @@ mod tests {
     #[test]
     fn test_into_mistral_basic_conversion() {
         let request = LanguageModelRequest {
+            thread_id: None,
+            prompt_id: None,
+            session_id: None,
+            intent: None,
+            mode: None,
             messages: vec![
                 LanguageModelRequestMessage {
                     role: Role::System,
@@ -1075,10 +1103,6 @@ mod tests {
             temperature: Some(0.5),
             tools: vec![],
             tool_choice: None,
-            thread_id: None,
-            prompt_id: None,
-            intent: None,
-            mode: None,
             stop: vec![],
             thinking_allowed: true,
         };

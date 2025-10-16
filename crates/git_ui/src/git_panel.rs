@@ -1887,6 +1887,7 @@ impl GitPanel {
                 let request = LanguageModelRequest {
                     thread_id: None,
                     prompt_id: None,
+                    session_id: None,
                     intent: Some(CompletionIntent::GenerateGitCommitMessage),
                     mode: None,
                     messages: vec![LanguageModelRequestMessage {
