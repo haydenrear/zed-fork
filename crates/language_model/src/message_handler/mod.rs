@@ -638,6 +638,9 @@ impl AiMessageHandler {
         messages: Vec<Message>,
         ids: &RequestIds,
     ) -> anyhow::Result<()> {
+        if messages.is_empty() {
+            return Ok(());
+        }
         if let Some(ref db_client) = self.database_client {
             db_client.save_append_messages(messages, ids);
         }
@@ -650,6 +653,9 @@ impl AiMessageHandler {
         messages: Vec<Message>,
         ids: &RequestIds,
     ) -> anyhow::Result<()> {
+        if messages.is_empty() {
+            return Ok(());
+        }
         if let Some(ref db_client) = self.database_client {
             db_client.save_append_messages_async(messages, ids).await;
         }
