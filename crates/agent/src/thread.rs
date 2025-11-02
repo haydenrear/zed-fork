@@ -819,9 +819,11 @@ impl Thread {
 
         let action_log = cx.new(|_| ActionLog::new(project.clone()));
 
+        let id1 = PromptId::new();
         Self {
             id,
-            prompt_id: PromptId::new(),
+            session_id: id1.clone().0.to_string(),
+            prompt_id: id1,
             title: if db_thread.title.is_empty() {
                 None
             } else {
@@ -1834,6 +1836,7 @@ impl Thread {
         log::debug!("Request will include {} messages", messages.len());
 
         let request = LanguageModelRequest {
+            session_id: Some(self.id.to_string()),
             thread_id: Some(self.id.to_string()),
             prompt_id: Some(self.prompt_id.to_string()),
             intent: Some(completion_intent),

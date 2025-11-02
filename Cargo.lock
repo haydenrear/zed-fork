@@ -8910,6 +8910,7 @@ dependencies = [
 name = "language_model"
 version = "0.1.0"
 dependencies = [
+ "agent-client-protocol",
  "anthropic",
  "anyhow",
  "base64 0.22.1",
@@ -8929,6 +8930,7 @@ dependencies = [
  "parking_lot",
  "proto",
  "ratelimit",
+ "schemars 1.0.4",
  "serde",
  "serde_json",
  "settings",

@@ -2,7 +2,7 @@ mod postgres;
 mod registry;
 
 use crate::{LanguageModelId, RequestIds};
-use agent_client_protocol::{self as acp, Annotations, ContentBlock, Plan, SessionUpdate};
+use agent_client_protocol::{self as acp, Annotations, ContentBlock, ContentChunk, Plan, SessionUpdate};
 use futures::{Stream, StreamExt, TryFutureExt};
 
 use crate::{
@@ -13,7 +13,6 @@ use enum_fields::EnumFields;
 use gpui::Global;
 pub use postgres::PostgresDatabaseClient;
 use ratelimit::Ratelimiter;
-use schemars::_private::NoSerialize;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -25,6 +24,7 @@ pub use registry::{
     MessageHandlerConfig, MessageHandlerRegistry, create_conversation_id, get_message_handler,
     get_message_handler_async, init_message_handler,
 };
+use schemars::_private::NoSerialize;
 
 /// Message types compatible with LangGraph's data model
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -384,21 +384,21 @@ impl AiMessageHandler {
 
     pub fn map_from_acp(update: &acp::SessionUpdate, id: &RequestIds) -> Option<Message> {
         match update {
-            SessionUpdate::UserMessageChunk { content } => match content {
-                ContentBlock::Text(t) => {
+            SessionUpdate::UserMessageChunk (content) => match content {
+                ContentChunk {content: ContentBlock::Text(t), meta } => {
                     Some(Message::Human {
                         content: ContentValue::new(t.text.to_string()),
                         id: id.thread_id.to_string(),
                         name: Some("ZedIdeAgent".to_string()),
                         example: false,
                         additional_kwargs: Default::default(),
-                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone()),
+                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone(), meta.clone()),
                     })
                 },
                 _ => None,
             },
-            SessionUpdate::AgentMessageChunk { content } => match content {
-                ContentBlock::Text(t) => {
+            SessionUpdate::AgentMessageChunk (content) => match content {
+                ContentChunk {content: ContentBlock::Text(t), meta } => {
                     Some(Message::Ai {
                         content: ContentValue::new(t.text.to_string()),
                         id: id.thread_id.to_string(),
@@ -407,13 +407,13 @@ impl AiMessageHandler {
                         invalid_tool_calls: None,
                         tool_calls: None,
                         additional_kwargs: Default::default(),
-                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone()),
+                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone(), meta.clone()),
                     })
                 },
                 _ => None,
             },
-            SessionUpdate::AgentThoughtChunk { content } => match content {
-                ContentBlock::Text(t) => {
+            SessionUpdate::AgentThoughtChunk (content) => match content {
+                ContentChunk {content: ContentBlock::Text(t), meta } => {
                     let mut additional_kwargs = HashMap::new();
                     additional_kwargs.insert(
                         "thinking".to_string(),
@@ -427,7 +427,7 @@ impl AiMessageHandler {
                         invalid_tool_calls: None,
                         tool_calls: None,
                         additional_kwargs,
-                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone()),
+                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone(), None),
                     })
                 }
                 _ => None,
@@ -454,7 +454,7 @@ impl AiMessageHandler {
                     tool_call_id: Some(tc.id.0.to_string()),
                     tool_name: Some(tc.title.to_string()),
                     additional_kwargs,
-                    response_metadata: Self::_create_acp_response_metadata(tc.meta.clone()),
+                    response_metadata: Self::_create_acp_response_metadata(tc.meta.clone(), None),
                 })
             }
             SessionUpdate::ToolCallUpdate(tcu) => {
@@ -474,7 +474,7 @@ impl AiMessageHandler {
                     tool_call_id: Some(tcu.id.0.to_string()),
                     tool_name: Some(tcu.id.0.to_string()),
                     additional_kwargs,
-                    response_metadata: Self::_create_acp_response_metadata(tcu.meta.clone()),
+                    response_metadata: Self::_create_acp_response_metadata(tcu.meta.clone(), None),
                 })
             }
             SessionUpdate::Plan(p) => {
@@ -486,7 +486,7 @@ impl AiMessageHandler {
                     })
                     .collect::<Vec<String>>();
 
-                let r = Self::_create_acp_response_metadata(p.meta.clone());
+                let r = Self::_create_acp_response_metadata(p.meta.clone(), None);
 
                 Some(Message::Ai {
                     content: ContentValue::Multiple(plan_entry),
@@ -514,9 +514,13 @@ impl AiMessageHandler {
         r
     }
 
-    fn _create_acp_response_metadata(option: Option<Value>) -> HashMap<String, Value> {
+    fn _create_acp_response_metadata(option: Option<Value>, option0: Option<Value>) -> HashMap<String, Value> {
         let mut r = HashMap::new();
         option.and_then(|f| f.as_str().map(|s| s.to_string()))
+            .and_then(|f| {
+                r.insert("meta".to_string(), Value::String(f))
+            });
+        option0.and_then(|f| f.as_str().map(|s| s.to_string()))
             .and_then(|f| {
                 r.insert("meta".to_string(), Value::String(f))
             });

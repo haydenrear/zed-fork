@@ -843,6 +843,7 @@ fn into_copilot_responses(
     use copilot::copilot_responses as responses;
 
     let LanguageModelRequest {
+        session_id: _,
         thread_id: _,
         prompt_id: _,
         intent: _,
