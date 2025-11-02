@@ -236,7 +236,7 @@ pub struct LocalSnapshot {
     /// All of the git repositories in the worktree, indexed by the project entry
     /// id of their parent directory.
     git_repositories: TreeMap<ProjectEntryId, LocalRepositoryEntry>,
-    /// The file handle of the worktree root. `None` if the worktree is a directory.
+    /// The file handle of the worktree root
     /// (so we can find it after it's been moved)
     root_file_handle: Option<Arc<dyn fs::FileHandle>>,
     executor: BackgroundExecutor,
@@ -656,7 +656,7 @@ impl Worktree {
 
     pub fn replica_id(&self) -> ReplicaId {
         match self {
-            Worktree::Local(_) => 0,
+            Worktree::Local(_) => ReplicaId::LOCAL,
             Worktree::Remote(worktree) => worktree.replica_id,
         }
     }
@@ -1318,7 +1318,8 @@ impl LocalWorktree {
         let entry = self.refresh_entry(path.clone(), None, cx);
         let is_private = self.is_path_private(path.as_ref());
 
-        cx.spawn(async move |this, _cx| {
+        let this = cx.weak_entity();
+        cx.background_spawn(async move {
             // WARN: Temporary workaround for #27283.
             //       We are not efficient with our memory usage per file, and use in excess of 64GB for a 10GB file
             //       Therefore, as a temporary workaround to prevent system freezes, we just bail before opening a file
@@ -1702,13 +1703,14 @@ impl LocalWorktree {
         };
         let t0 = Instant::now();
         let mut refresh = self.refresh_entries_for_paths(paths);
+        // todo(lw): Hot foreground spawn
         cx.spawn(async move |this, cx| {
             refresh.recv().await;
             log::trace!("refreshed entry {path:?} in {:?}", t0.elapsed());
             let new_entry = this.read_with(cx, |this, _| {
-                this.entry_for_path(&path)
-                    .cloned()
-                    .context("reading path after update")
+                this.entry_for_path(&path).cloned().with_context(|| {
+                    format!("Could not find entry in worktree for {path:?} after refresh")
+                })
             })??;
             Ok(Some(new_entry))
         })
@@ -3614,25 +3616,32 @@ impl BackgroundScanner {
 
         log::trace!("containing git repository: {containing_git_repository:?}");
 
-        let mut global_gitignore_events =
-            if let Some(global_gitignore_path) = &paths::global_gitignore_path() {
-                self.state.lock().await.snapshot.global_gitignore =
-                    if self.fs.is_file(&global_gitignore_path).await {
-                        build_gitignore(global_gitignore_path, self.fs.as_ref())
-                            .await
-                            .ok()
-                            .map(Arc::new)
-                    } else {
-                        None
-                    };
+        let mut global_gitignore_events = if let Some(global_gitignore_path) =
+            &paths::global_gitignore_path()
+        {
+            let is_file = self.fs.is_file(&global_gitignore_path).await;
+            self.state.lock().await.snapshot.global_gitignore = if is_file {
+                build_gitignore(global_gitignore_path, self.fs.as_ref())
+                    .await
+                    .ok()
+                    .map(Arc::new)
+            } else {
+                None
+            };
+            if is_file
+                || matches!(global_gitignore_path.parent(), Some(path) if self.fs.is_dir(path).await)
+            {
                 self.fs
                     .watch(global_gitignore_path, FS_WATCH_LATENCY)
                     .await
                     .0
             } else {
-                self.state.lock().await.snapshot.global_gitignore = None;
-                Box::pin(futures::stream::empty())
-            };
+                Box::pin(futures::stream::pending())
+            }
+        } else {
+            self.state.lock().await.snapshot.global_gitignore = None;
+            Box::pin(futures::stream::pending())
+        };
 
         let (scan_job_tx, scan_job_rx) = channel::unbounded();
         {
@@ -3740,7 +3749,7 @@ impl BackgroundScanner {
                         Some([event, ..]) => {
                             self.update_global_gitignore(&event.path).await;
                         }
-                        _ => {},
+                        _ => (),
                     }
                 }
             }
@@ -3823,7 +3832,7 @@ impl BackgroundScanner {
                         .unbounded_send(ScanState::RootUpdated { new_path })
                         .ok();
                 } else {
-                    log::warn!("root path could not be canonicalized: {}", err);
+                    log::warn!("root path could not be canonicalized: {:#}", err);
                 }
                 return;
             }

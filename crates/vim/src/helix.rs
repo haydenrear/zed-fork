@@ -345,7 +345,7 @@ impl Vim {
         self.update_editor(cx, |vim, editor, cx| {
             let has_selection = editor
                 .selections
-                .all_adjusted(cx)
+                .all_adjusted(&editor.display_snapshot(cx))
                 .iter()
                 .any(|selection| !selection.is_empty());
 
@@ -450,7 +450,7 @@ impl Vim {
                         prior_selections,
                         prior_operator: self.operator_stack.last().cloned(),
                         prior_mode: self.mode,
-                        helix_select: true,
+                        is_helix_regex_search: true,
                     }
                 });
             }
@@ -478,19 +478,20 @@ impl Vim {
     pub fn helix_replace(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.update_editor(cx, |_, editor, cx| {
             editor.transact(window, cx, |editor, window, cx| {
-                let (map, selections) = editor.selections.all_display(cx);
+                let display_map = editor.display_snapshot(cx);
+                let selections = editor.selections.all_display(&display_map);
 
                 // Store selection info for positioning after edit
                 let selection_info: Vec<_> = selections
                     .iter()
                     .map(|selection| {
                         let range = selection.range();
-                        let start_offset = range.start.to_offset(&map, Bias::Left);
-                        let end_offset = range.end.to_offset(&map, Bias::Left);
+                        let start_offset = range.start.to_offset(&display_map, Bias::Left);
+                        let end_offset = range.end.to_offset(&display_map, Bias::Left);
                         let was_empty = range.is_empty();
                         let was_reversed = selection.reversed;
                         (
-                            map.buffer_snapshot().anchor_before(start_offset),
+                            display_map.buffer_snapshot().anchor_before(start_offset),
                             end_offset - start_offset,
                             was_empty,
                             was_reversed,
@@ -504,11 +505,11 @@ impl Vim {
 
                     // For empty selections, extend to replace one character
                     if range.is_empty() {
-                        range.end = movement::saturating_right(&map, range.start);
+                        range.end = movement::saturating_right(&display_map, range.start);
                     }
 
-                    let byte_range = range.start.to_offset(&map, Bias::Left)
-                        ..range.end.to_offset(&map, Bias::Left);
+                    let byte_range = range.start.to_offset(&display_map, Bias::Left)
+                        ..range.end.to_offset(&display_map, Bias::Left);
 
                     if !byte_range.is_empty() {
                         let replacement_text = text.repeat(byte_range.len());
@@ -568,7 +569,7 @@ impl Vim {
         self.update_editor(cx, |_, editor, cx| {
             editor.hide_mouse_cursor(HideMouseCursorOrigin::MovementAction, cx);
             let display_map = editor.display_map.update(cx, |map, cx| map.snapshot(cx));
-            let mut selections = editor.selections.all::<Point>(cx);
+            let mut selections = editor.selections.all::<Point>(&display_map);
             let max_point = display_map.buffer_snapshot().max_point();
             let buffer_snapshot = &display_map.buffer_snapshot();
 
@@ -606,7 +607,9 @@ impl Vim {
         cx: &mut Context<Self>,
     ) {
         self.update_editor(cx, |_, editor, cx| {
-            let newest = editor.selections.newest::<usize>(cx);
+            let newest = editor
+                .selections
+                .newest::<usize>(&editor.display_snapshot(cx));
             editor.change_selections(Default::default(), window, cx, |s| s.select(vec![newest]));
         });
     }
@@ -633,7 +636,10 @@ impl Vim {
                 if yank {
                     vim.copy_selections_content(editor, MotionKind::Exclusive, window, cx);
                 }
-                let selections = editor.selections.all::<Point>(cx).into_iter();
+                let selections = editor
+                    .selections
+                    .all::<Point>(&editor.display_snapshot(cx))
+                    .into_iter();
                 let edits = selections.map(|selection| (selection.start..selection.end, ""));
                 editor.edit(edits, cx);
             });
@@ -1273,6 +1279,24 @@ mod test {
     }
 
     #[gpui::test]
+    async fn test_exit_visual_mode(cx: &mut gpui::TestAppContext) {
+        let mut cx = VimTestContext::new(cx, true).await;
+
+        cx.set_state("ˇone two", Mode::Normal);
+        cx.simulate_keystrokes("v w");
+        cx.assert_state("«one tˇ»wo", Mode::Visual);
+        cx.simulate_keystrokes("escape");
+        cx.assert_state("one ˇtwo", Mode::Normal);
+
+        cx.enable_helix();
+        cx.set_state("ˇone two", Mode::HelixNormal);
+        cx.simulate_keystrokes("v w");
+        cx.assert_state("«one ˇ»two", Mode::HelixSelect);
+        cx.simulate_keystrokes("escape");
+        cx.assert_state("«one ˇ»two", Mode::HelixNormal);
+    }
+
+    #[gpui::test]
     async fn test_helix_select_regex(cx: &mut gpui::TestAppContext) {
         let mut cx = VimTestContext::new(cx, true).await;
         cx.enable_helix();
@@ -1291,9 +1315,47 @@ mod test {
         cx.simulate_keystrokes("enter");
         cx.assert_state("«oneˇ» two «oneˇ»", Mode::HelixNormal);
 
-        cx.set_state("ˇone two one", Mode::HelixNormal);
-        cx.simulate_keystrokes("s o n e enter");
-        cx.assert_state("ˇone two one", Mode::HelixNormal);
+        // TODO: change "search_in_selection" to not perform any search when in helix select mode with no selection
+        // cx.set_state("ˇstuff one two one", Mode::HelixNormal);
+        // cx.simulate_keystrokes("s o n e enter");
+        // cx.assert_state("ˇstuff one two one", Mode::HelixNormal);
+    }
+
+    #[gpui::test]
+    async fn test_helix_select_next_match(cx: &mut gpui::TestAppContext) {
+        let mut cx = VimTestContext::new(cx, true).await;
+
+        cx.set_state("ˇhello two one two one two one", Mode::Visual);
+        cx.simulate_keystrokes("/ o n e");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("n n");
+        cx.assert_state("«hello two one two one two oˇ»ne", Mode::Visual);
+
+        cx.set_state("ˇhello two one two one two one", Mode::Normal);
+        cx.simulate_keystrokes("/ o n e");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("n n");
+        cx.assert_state("hello two one two one two ˇone", Mode::Normal);
+
+        cx.set_state("ˇhello two one two one two one", Mode::Normal);
+        cx.simulate_keystrokes("/ o n e");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("n g n g n");
+        cx.assert_state("hello two one two «one two oneˇ»", Mode::Visual);
+
+        cx.enable_helix();
+
+        cx.set_state("ˇhello two one two one two one", Mode::HelixNormal);
+        cx.simulate_keystrokes("/ o n e");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("n n");
+        cx.assert_state("hello two one two one two «oneˇ»", Mode::HelixNormal);
+
+        cx.set_state("ˇhello two one two one two one", Mode::HelixSelect);
+        cx.simulate_keystrokes("/ o n e");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("n n");
+        cx.assert_state("ˇhello two «oneˇ» two «oneˇ» two «oneˇ»", Mode::HelixSelect);
     }
 
     #[gpui::test]

@@ -6,7 +6,7 @@ See [Configuring Zed](./configuring-zed.md) for additional information and other
 
 ## Themes
 
-Use may install zed extensions providing [Themes](./themes.md) and [Icon Themes](./icon-themes.md) via {#action zed::Extensions} from the command palette or menu.
+User may install zed extensions providing [Themes](./themes.md) and [Icon Themes](./icon-themes.md) via {#action zed::Extensions} from the command palette or menu.
 
 You can preview/choose amongst your installed themes and icon themes with {#action theme_selector::Toggle} ({#kb theme_selector::Toggle}) and ({#action icon_theme_selector::Toggle}) which will modify the following settings:
 
@@ -182,7 +182,7 @@ TBD: Centered layout related settings
   "show_whitespaces": "selection",
   "whitespace_map": { // Which characters to show when `show_whitespaces` enabled
     "space": "•",
-    "tab": "→"
+    "tab": "⟶"       // use "→", for a shorter arrow
   },
 
   "unnecessary_code_fade": 0.3, // How much to fade out unused code.
@@ -319,6 +319,10 @@ TBD: Centered layout related settings
     // Clicking the button brings up an input for jumping to a line and column.
     // Defaults to true.
     "cursor_position_button": true,
+    // Show/hide a button that displays the buffer's line-ending mode.
+    // Clicking the button brings up the line-ending selector.
+    // Defaults to false.
+    "line_endings_button": false
   },
   "global_lsp_settings": {
     // Show/hide the LSP button in the status bar.

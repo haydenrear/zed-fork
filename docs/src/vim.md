@@ -237,9 +237,9 @@ To use these text objects, you need to add bindings to your keymap. Here's an ex
 With this configuration, you can use commands like:
 
 - `cib` - Change inside brackets using AnyBrackets behavior
-- `cim` - Change inside brackets using MiniBrackets behavior
+- `ciB` - Change inside brackets using MiniBrackets behavior
 - `ciq` - Change inside quotes using AnyQuotes behavior
-- `ciM` - Change inside quotes using MiniQuotes behavior
+- `ciQ` - Change inside quotes using MiniQuotes behavior
 
 ## Command palette
 
@@ -628,7 +628,7 @@ Here's an example of these settings changed:
   // Allow the cursor to reach the edges of the screen
   "vertical_scroll_margin": 0,
   "gutter": {
-    // Disable line numbers completely:
+    // Disable line numbers completely
     "line_numbers": false
   },
   "command_aliases": {

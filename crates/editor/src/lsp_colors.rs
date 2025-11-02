@@ -6,15 +6,15 @@ use gpui::{Hsla, Rgba, Task};
 use itertools::Itertools;
 use language::point_from_lsp;
 use multi_buffer::Anchor;
-use project::DocumentColor;
+use project::{DocumentColor, InlayId};
 use settings::Settings as _;
 use text::{Bias, BufferId, OffsetRangeExt as _};
 use ui::{App, Context, Window};
 use util::post_inc;
 
 use crate::{
-    DisplayPoint, Editor, EditorSettings, EditorSnapshot, FETCH_COLORS_DEBOUNCE_TIMEOUT, InlayId,
-    InlaySplice, RangeToAnchorExt, display_map::Inlay, editor_settings::DocumentColorsRenderMode,
+    DisplayPoint, Editor, EditorSettings, EditorSnapshot, FETCH_COLORS_DEBOUNCE_TIMEOUT,
+    InlaySplice, RangeToAnchorExt, editor_settings::DocumentColorsRenderMode, inlays::Inlay,
 };
 
 #[derive(Debug)]
@@ -164,7 +164,7 @@ impl Editor {
         }
 
         let visible_buffers = self
-            .visible_excerpts(None, cx)
+            .visible_excerpts(cx)
             .into_values()
             .map(|(buffer, ..)| buffer)
             .filter(|editor_buffer| {
@@ -251,25 +251,14 @@ impl Editor {
                                     {
                                         continue;
                                     }
-                                    let Some(color_start_anchor) = multi_buffer_snapshot
-                                        .anchor_in_excerpt(
-                                            *excerpt_id,
-                                            buffer_snapshot.anchor_before(
-                                                buffer_snapshot
-                                                    .clip_point_utf16(color_start, Bias::Left),
-                                            ),
-                                        )
-                                    else {
-                                        continue;
-                                    };
-                                    let Some(color_end_anchor) = multi_buffer_snapshot
-                                        .anchor_in_excerpt(
-                                            *excerpt_id,
-                                            buffer_snapshot.anchor_after(
-                                                buffer_snapshot
-                                                    .clip_point_utf16(color_end, Bias::Right),
-                                            ),
-                                        )
+                                    let start = buffer_snapshot.anchor_before(
+                                        buffer_snapshot.clip_point_utf16(color_start, Bias::Left),
+                                    );
+                                    let end = buffer_snapshot.anchor_after(
+                                        buffer_snapshot.clip_point_utf16(color_end, Bias::Right),
+                                    );
+                                    let Some(range) = multi_buffer_snapshot
+                                        .anchor_range_in_excerpt(*excerpt_id, start..end)
                                     else {
                                         continue;
                                     };
@@ -285,16 +274,14 @@ impl Editor {
                                         new_buffer_colors.binary_search_by(|(probe, _)| {
                                             probe
                                                 .start
-                                                .cmp(&color_start_anchor, &multi_buffer_snapshot)
+                                                .cmp(&range.start, &multi_buffer_snapshot)
                                                 .then_with(|| {
-                                                    probe.end.cmp(
-                                                        &color_end_anchor,
-                                                        &multi_buffer_snapshot,
-                                                    )
+                                                    probe
+                                                        .end
+                                                        .cmp(&range.end, &multi_buffer_snapshot)
                                                 })
                                         });
-                                    new_buffer_colors
-                                        .insert(i, (color_start_anchor..color_end_anchor, color));
+                                    new_buffer_colors.insert(i, (range, color));
                                     break;
                                 }
                             }
@@ -413,8 +400,7 @@ impl Editor {
                     }
 
                     if colors.render_mode == DocumentColorsRenderMode::Inlay
-                        && (!colors_splice.to_insert.is_empty()
-                            || !colors_splice.to_remove.is_empty())
+                        && !colors_splice.is_empty()
                     {
                         editor.splice_inlays(&colors_splice.to_remove, colors_splice.to_insert, cx);
                         updated = true;
