@@ -6,10 +6,16 @@ use sqlx::{Connection, Executor, PgConnection, PgPool, postgres::PgPoolOptions};
 use std::sync::Arc;
 use std::time::Duration;
 
+static EXECUTOR: Lazy<Executor<'static>> = Lazy::new(|| {
+    Executor::new()
+});
+
 /// A PostgreSQL implementation of the DatabaseClient trait
 pub struct PostgresDatabaseClient {
     pool: Option<Arc<PgPool>>,
 }
+
+
 
 impl PostgresDatabaseClient {
     /// Creates a new PostgreSQL database client
@@ -17,8 +23,8 @@ impl PostgresDatabaseClient {
         log::info!("Connecting to postgres.");
 
         let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .acquire_timeout(Duration::from_secs(3))
+            .max_connections(1)
+            .acquire_timeout(Duration::from_secs(10))
             .connect(connection_string)
             .await?;
 

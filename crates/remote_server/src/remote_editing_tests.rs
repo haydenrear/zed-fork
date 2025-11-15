@@ -13,7 +13,7 @@ use fs::{FakeFs, Fs};
 use gpui::{AppContext as _, Entity, SemanticVersion, SharedString, TestAppContext};
 use http_client::{BlockedHttpClient, FakeHttpClient};
 use language::{
-    Buffer, FakeLspAdapter, LanguageConfig, LanguageMatcher, LanguageRegistry, LineEnding, Rope,
+    Buffer, FakeLspAdapter, LanguageConfig, LanguageMatcher, LanguageRegistry, LineEnding,
     language_settings::{AllLanguageSettings, language_settings},
 };
 use lsp::{CompletionContext, CompletionResponse, CompletionTriggerKind, LanguageServerName};
@@ -120,7 +120,7 @@ async fn test_basic_remote_editing(cx: &mut TestAppContext, server_cx: &mut Test
     // sees the new file.
     fs.save(
         path!("/code/project1/src/main.rs").as_ref(),
-        &Rope::from_str_small("fn main() {}"),
+        &"fn main() {}".into(),
         Default::default(),
     )
     .await
@@ -766,7 +766,7 @@ async fn test_remote_reload(cx: &mut TestAppContext, server_cx: &mut TestAppCont
 
     fs.save(
         &PathBuf::from(path!("/code/project1/src/lib.rs")),
-        &Rope::from_str_small("bangles"),
+        &("bangles".to_string().into()),
         LineEnding::Unix,
     )
     .await
@@ -781,7 +781,7 @@ async fn test_remote_reload(cx: &mut TestAppContext, server_cx: &mut TestAppCont
 
     fs.save(
         &PathBuf::from(path!("/code/project1/src/lib.rs")),
-        &Rope::from_str_small("bloop"),
+        &("bloop".to_string().into()),
         LineEnding::Unix,
     )
     .await
@@ -1493,10 +1493,7 @@ async fn test_remote_git_diffs_when_recv_update_repository_delay(
         .await
         .unwrap();
     let buffer_id = cx.update(|cx| buffer.read(cx).remote_id());
-    cx.update(|cx| {
-        workspace::init_settings(cx);
-        editor::init_settings(cx);
-    });
+
     let cx = cx.add_empty_window();
     let editor = cx.new_window_entity(|window, cx| {
         Editor::for_buffer(buffer, Some(project.clone()), window, cx)
@@ -1665,7 +1662,7 @@ async fn test_remote_git_branches(cx: &mut TestAppContext, server_cx: &mut TestA
     // Also try creating a new branch
     cx.update(|cx| {
         repository.update(cx, |repo, _cx| {
-            repo.create_branch("totally-new-branch".to_string())
+            repo.create_branch("totally-new-branch".to_string(), None)
         })
     })
     .await
@@ -1853,8 +1850,6 @@ pub async fn init_test(
     let proxy = Arc::new(ExtensionHostProxy::new());
     server_cx.update(HeadlessProject::init);
     let headless = server_cx.new(|cx| {
-        client::init_settings(cx);
-
         HeadlessProject::new(
             crate::HeadlessAppState {
                 session: ssh_server_client,
@@ -1906,7 +1901,6 @@ fn build_project(ssh: Entity<RemoteClient>, cx: &mut TestAppContext) -> Entity<P
 
     cx.update(|cx| {
         Project::init(&client, cx);
-        language::init(cx);
     });
 
     cx.update(|cx| Project::remote(ssh, client, node, user_store, languages, fs, cx))

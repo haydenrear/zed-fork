@@ -98,7 +98,7 @@ impl LspInstaller for CLspAdapter {
                     })
                     .await
                     .inspect_err(|err| {
-                        log::warn!("Unable to run {binary_path:?} asset, redownloading: {err}",)
+                        log::warn!("Unable to run {binary_path:?} asset, redownloading: {err:#}",)
                     })
             };
             if let (Some(actual_digest), Some(expected_digest)) =
@@ -189,7 +189,7 @@ impl super::LspAdapter for CLspAdapter {
             Some(lsp::CompletionItemKind::FIELD) if completion.detail.is_some() => {
                 let detail = completion.detail.as_ref().unwrap();
                 let text = format!("{} {}", detail, label);
-                let source = Rope::from_str_small(format!("struct S {{ {} }}", text).as_str());
+                let source = Rope::from(format!("struct S {{ {} }}", text).as_str());
                 let runs = language.highlight_text(&source, 11..11 + text.len());
                 let filter_range = completion
                     .filter_text
@@ -206,8 +206,7 @@ impl super::LspAdapter for CLspAdapter {
             {
                 let detail = completion.detail.as_ref().unwrap();
                 let text = format!("{} {}", detail, label);
-                let runs =
-                    language.highlight_text(&Rope::from_str_small(text.as_str()), 0..text.len());
+                let runs = language.highlight_text(&Rope::from(text.as_str()), 0..text.len());
                 let filter_range = completion
                     .filter_text
                     .as_deref()
@@ -223,8 +222,7 @@ impl super::LspAdapter for CLspAdapter {
             {
                 let detail = completion.detail.as_ref().unwrap();
                 let text = format!("{} {}", detail, label);
-                let runs =
-                    language.highlight_text(&Rope::from_str_small(text.as_str()), 0..text.len());
+                let runs = language.highlight_text(&Rope::from(text.as_str()), 0..text.len());
                 let filter_range = completion
                     .filter_text
                     .as_deref()
@@ -328,7 +326,7 @@ impl super::LspAdapter for CLspAdapter {
         Some(CodeLabel::new(
             text[display_range.clone()].to_string(),
             filter_range,
-            language.highlight_text(&Rope::from_str_small(text.as_str()), display_range),
+            language.highlight_text(&text.as_str().into(), display_range),
         ))
     }
 
@@ -404,7 +402,6 @@ mod tests {
         cx.update(|cx| {
             let test_settings = SettingsStore::test(cx);
             cx.set_global(test_settings);
-            language::init(cx);
             cx.update_global::<SettingsStore, _>(|store, cx| {
                 store.update_user_settings(cx, |s| {
                     s.project.all_languages.defaults.tab_size = NonZeroU32::new(2);

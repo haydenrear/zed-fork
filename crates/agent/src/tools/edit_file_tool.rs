@@ -562,14 +562,12 @@ fn resolve_path(
 mod tests {
     use super::*;
     use crate::{ContextServerRegistry, Templates};
-    use client::TelemetrySettings;
     use fs::Fs;
     use gpui::{TestAppContext, UpdateGlobal};
     use language_model::fake_provider::FakeLanguageModel;
     use prompt_store::ProjectContext;
     use serde_json::json;
     use settings::SettingsStore;
-    use text::Rope;
     use util::{path, rel_path::rel_path};
 
     #[gpui::test]
@@ -742,7 +740,7 @@ mod tests {
         // Create the file
         fs.save(
             path!("/root/src/main.rs").as_ref(),
-            &Rope::from_str_small("initial content"),
+            &"initial content".into(),
             language::LineEnding::Unix,
         )
         .await
@@ -909,7 +907,7 @@ mod tests {
         // Create a simple file with trailing whitespace
         fs.save(
             path!("/root/src/main.rs").as_ref(),
-            &Rope::from_str_small("initial content"),
+            &"initial content".into(),
             language::LineEnding::Unix,
         )
         .await
@@ -1754,10 +1752,6 @@ mod tests {
         cx.update(|cx| {
             let settings_store = SettingsStore::test(cx);
             cx.set_global(settings_store);
-            language::init(cx);
-            TelemetrySettings::register(cx);
-            agent_settings::AgentSettings::register(cx);
-            Project::init_settings(cx);
         });
     }
 }
