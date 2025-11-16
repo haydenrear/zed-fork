@@ -15,16 +15,18 @@ pub use postgres::PostgresDatabaseClient;
 use ratelimit::Ratelimiter;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use serde_json::Value;
 // pub use example::run_message_handler_example;
-pub use registry::{
-    MessageHandlerConfig, MessageHandlerRegistry, create_conversation_id, get_message_handler,
-    get_message_handler_async, init_message_handler,
-};
 use schemars::_private::NoSerialize;
+
+pub use registry::{
+    MessageHandlerConfig, MessageHandlerRegistry, create_conversation_id, get_message_handler, init_message_handler, get_message_handler_async,
+    create_message_handler
+};
 
 /// Message types compatible with LangGraph's data model
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +155,7 @@ pub trait DatabaseClient: Send + Sync {
 /// Message handler for interfacing with LangGraph and database storage
 pub struct AiMessageHandler {
     database_client: Option<Arc<PostgresDatabaseClient>>,
+    env: Vec<String>
 }
 
 pub trait MessageHandlerTrait: Send + Sync {}
@@ -168,6 +171,7 @@ pub struct LanguageModelArgs {
     pub intent: Option<String>,
     pub mode: Option<String>,
     pub prompt_id: Option<String>,
+    pub env: Vec<String>
 }
 
 impl LanguageModelArgs {
@@ -178,6 +182,7 @@ impl LanguageModelArgs {
             intent: None,
             mode: None,
             prompt_id: None,
+            env: vec![]
         }
     }
 
@@ -188,6 +193,7 @@ impl LanguageModelArgs {
             intent: request.intent.as_ref().map(|i| format!("{:?}", i)),
             mode: request.mode.as_ref().map(|m| format!("{:?}", m)),
             prompt_id: request.prompt_id.clone(),
+            env: vec![]
         }
     }
 }
@@ -260,15 +266,26 @@ impl TokenRateLimiter {
 
 impl AiMessageHandler {
     pub fn new(database_client: Option<Arc<PostgresDatabaseClient>>) -> Self {
-        Self { database_client }
+        if let Ok(s) = env::var("TAGS") {
+            Self {
+                database_client,
+                env: s.split(",").map(|s| s.to_string()).collect()
+            }
+        } else {
+            Self {
+                database_client,
+                env: vec![]
+            }
+        }
     }
 
     pub async fn save_completion_req(
         &self,
         request_message: &LanguageModelRequest,
         ids: &RequestIds,
-        language_model_args: LanguageModelArgs,
+        mut language_model_args: LanguageModelArgs,
     ) {
+        language_model_args.env.extend(self.env.clone());
         let collected = request_message
             .messages
             .iter()
@@ -280,7 +297,7 @@ impl AiMessageHandler {
     }
 
     pub fn save_acp(&self, update: &acp::SessionUpdate, ids: &RequestIds) {
-        if let Some(msg) = Self::map_from_acp(update, ids) {
+        if let Some(msg) = self.map_from_acp(update, ids) {
             let _ = self.save_append_messages(vec![msg], ids);
         }
     }
@@ -302,13 +319,15 @@ impl AiMessageHandler {
 
     fn build_response_metadata(
         language_model_args: &LanguageModelArgs,
-    ) -> HashMap<String, serde_json::Value> {
+    ) -> HashMap<String, Value> {
         let mut response_metadata = HashMap::new();
 
         response_metadata.insert(
             "model_id".to_string(),
             serde_json::Value::from(language_model_args.model_id.0.to_string()),
         );
+
+        response_metadata.insert("TAGS".into(), Self::_from_strings(&language_model_args.env));
 
         if let Some(temperature) = language_model_args.temperature {
             response_metadata.insert(
@@ -337,7 +356,7 @@ impl AiMessageHandler {
     pub fn map_from_completion_request(
         request_message: &LanguageModelRequestMessage,
         id: &RequestIds,
-        language_model_args: &LanguageModelArgs,
+        language_model_args: &LanguageModelArgs
     ) -> Option<Message> {
         let content = match serde_json::to_string(&request_message.content) {
             Ok(content) => content,
@@ -382,7 +401,7 @@ impl AiMessageHandler {
         }
     }
 
-    pub fn map_from_acp(update: &acp::SessionUpdate, id: &RequestIds) -> Option<Message> {
+    pub fn map_from_acp(&self, update: &acp::SessionUpdate, id: &RequestIds) -> Option<Message> {
         match update {
             SessionUpdate::UserMessageChunk (content) => match content {
                 ContentChunk {content: ContentBlock::Text(t), meta } => {
@@ -392,7 +411,7 @@ impl AiMessageHandler {
                         name: Some("ZedIdeAgent".to_string()),
                         example: false,
                         additional_kwargs: Default::default(),
-                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone(), meta.clone()),
+                        response_metadata: self._create_acp_response_metadata(t.meta.clone(), meta.clone()),
                     })
                 },
                 _ => None,
@@ -407,7 +426,7 @@ impl AiMessageHandler {
                         invalid_tool_calls: None,
                         tool_calls: None,
                         additional_kwargs: Default::default(),
-                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone(), meta.clone()),
+                        response_metadata: self._create_acp_response_metadata(t.meta.clone(), meta.clone()),
                     })
                 },
                 _ => None,
@@ -427,7 +446,7 @@ impl AiMessageHandler {
                         invalid_tool_calls: None,
                         tool_calls: None,
                         additional_kwargs,
-                        response_metadata: Self::_create_acp_response_metadata(t.meta.clone(), None),
+                        response_metadata: self._create_acp_response_metadata(t.meta.clone(), None),
                     })
                 }
                 _ => None,
@@ -454,7 +473,7 @@ impl AiMessageHandler {
                     tool_call_id: Some(tc.id.0.to_string()),
                     tool_name: Some(tc.title.to_string()),
                     additional_kwargs,
-                    response_metadata: Self::_create_acp_response_metadata(tc.meta.clone(), None),
+                    response_metadata: self._create_acp_response_metadata(tc.meta.clone(), None),
                 })
             }
             SessionUpdate::ToolCallUpdate(tcu) => {
@@ -474,7 +493,7 @@ impl AiMessageHandler {
                     tool_call_id: Some(tcu.id.0.to_string()),
                     tool_name: Some(tcu.id.0.to_string()),
                     additional_kwargs,
-                    response_metadata: Self::_create_acp_response_metadata(tcu.meta.clone(), None),
+                    response_metadata: self._create_acp_response_metadata(tcu.meta.clone(), None),
                 })
             }
             SessionUpdate::Plan(p) => {
@@ -486,7 +505,7 @@ impl AiMessageHandler {
                     })
                     .collect::<Vec<String>>();
 
-                let r = Self::_create_acp_response_metadata(p.meta.clone(), None);
+                let r = self._create_acp_response_metadata(p.meta.clone(), None);
 
                 Some(Message::Ai {
                     content: ContentValue::Multiple(plan_entry),
@@ -514,7 +533,7 @@ impl AiMessageHandler {
         r
     }
 
-    fn _create_acp_response_metadata(option: Option<Value>, option0: Option<Value>) -> HashMap<String, Value> {
+    fn _create_acp_response_metadata(&self, option: Option<Value>, option0: Option<Value>) -> HashMap<String, Value> {
         let mut r = HashMap::new();
         option.and_then(|f| f.as_str().map(|s| s.to_string()))
             .and_then(|f| {
@@ -526,7 +545,12 @@ impl AiMessageHandler {
             });
 
         r.insert("acp".into(), Value::String("true".into()));
+        r.insert("TAGS".into(), Self::_from_strings(&self.env));
         r
+    }
+
+    fn _from_strings(vec: &Vec<String>) -> Value {
+        Value::Array(vec.iter().map(|s| Value::String(s.to_string())).collect())
     }
 
     pub fn map_from_completion_event(

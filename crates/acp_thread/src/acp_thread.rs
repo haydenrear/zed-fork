@@ -36,7 +36,7 @@ use std::{fmt::Display, mem, path::PathBuf, sync::Arc};
 use ui::App;
 use util::{ResultExt, get_default_system_shell_preferring_bash, paths::PathStyle};
 use uuid::Uuid;
-use language_model::{_retrieve_ids, get_message_handler_async, AiMessageContent, _retrieve_ids_from};
+use language_model::{_retrieve_ids, AiMessageContent, _retrieve_ids_from, create_message_handler};
 use language_model::message_handler::{init_message_handler, AiMessageHandler, MessageHandlerConfig, MessageHandlerRegistry, PostgresDatabaseClient};
 
 #[derive(Debug)]
@@ -1035,12 +1035,7 @@ impl AcpThread {
             }
         });
 
-        let connection_string = "postgresql://postgres:postgres@localhost:5488/postgres".to_string();
-
-        let db_client = smol::block_on(PostgresDatabaseClient::new(&connection_string))
-            .unwrap();
-
-        let g = AiMessageHandler::new(Some(Arc::new(db_client)));
+        let g = create_message_handler(MessageHandlerConfig { postgres_connection_string: None, enable_storage: true });
 
         Self {
             action_log,
@@ -1058,7 +1053,7 @@ impl AcpThread {
             terminals: HashMap::default(),
             pending_terminal_output: HashMap::default(),
             pending_terminal_exit: HashMap::default(),
-            ai_message_handler: Arc::new(g)
+            ai_message_handler: g
         }
     }
 

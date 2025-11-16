@@ -12,7 +12,9 @@ pub mod message_handler;
 pub mod fake_provider;
 
 pub use crate::message_handler::{
-    Message as AiMessageContent, MessageType, get_message_handler_async,
+    Message as AiMessageContent, MessageType,
+    create_message_handler, get_message_handler_async, get_message_handler,
+    init_message_handler
 };
 use serde_json;
 pub use crate::model::*;

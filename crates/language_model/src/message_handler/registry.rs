@@ -22,6 +22,12 @@ pub struct MessageHandlerConfig {
     pub enable_storage: bool,
 }
 
+impl MessageHandlerConfig {
+    pub fn parse_cxn_string(&self) -> String {
+        _parse_cxn_string(self)
+    }
+}
+
 impl Default for MessageHandlerConfig {
     fn default() -> Self {
         Self {
@@ -32,9 +38,45 @@ impl Default for MessageHandlerConfig {
 }
 
 /// Initialize the message handler with the given configuration
-pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<Result<()>> {
+pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) {
     log::info!("Initializing connection string");
 
+    let connection_string = config.parse_cxn_string();
+
+    log::info!("Initializing connection string");
+
+    if cx.has_global::<MessageHandlerRegistry>() {
+        let option = get_message_handler(cx);
+        if option.as_ref().is_some() {
+            if option.as_ref().unwrap().database_client.as_ref().is_some() {
+                return;
+            }
+        }
+    }
+
+    log::info!("Setting global message handler");
+    log::info!("Setting global postgres message handler");
+    log::info!("Postgres Connection initializing");
+
+    smol::block_on(async move {
+        let mut registry = MessageHandlerRegistry::default();
+
+        if !config.enable_storage {
+            let message_handler = Arc::new(AiMessageHandler::new(None));
+            registry.message_handler = Some(message_handler);
+        } else if let Ok(db_client)  = PostgresDatabaseClient::new(&connection_string).await {
+            let message_handler = Arc::new(AiMessageHandler::new(Some(Arc::new(db_client))));
+            registry.message_handler = Some(message_handler);
+        } else {
+            let message_handler = Arc::new(AiMessageHandler::new(None));
+            registry.message_handler = Some(message_handler);
+        }
+
+        cx.set_global(registry);
+    });
+}
+
+fn _parse_cxn_string(config: &MessageHandlerConfig) -> String {
     let connection_string = match &config.postgres_connection_string {
         Some(cs) => cs.clone(),
         None => {
@@ -45,57 +87,30 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) -> Task<
             })
         }
     };
+    connection_string
+}
 
-    log::info!("Initializing connection string");
-
-    if cx.has_global::<MessageHandlerRegistry>() {
-        let option = get_message_handler(cx);
-        if option.as_ref().is_some() {
-            if option.as_ref().unwrap().database_client.as_ref().is_some() {
-                return Task::ready(Ok(()));
-            }
+pub fn create_message_handler(connection_string: MessageHandlerConfig) -> Arc<AiMessageHandler> {
+    smol::block_on(async move {
+        if !connection_string.enable_storage {
+            Arc::new(AiMessageHandler::new(None))
+        } else if let Ok(db_client)  = PostgresDatabaseClient::new(&connection_string.parse_cxn_string()).await {
+            Arc::new(AiMessageHandler::new(Some(Arc::new(db_client))))
+        } else {
+            Arc::new(AiMessageHandler::new(None))
         }
-    }
-
-    let message_handler = AiMessageHandler::new(None);
-
-    log::info!("Setting global message handler");
-
-    let mut registry = MessageHandlerRegistry::default();
-    registry.message_handler = Some(Arc::new(message_handler));
-    cx.set_global(registry);
-
-    log::info!("Setting global postgres message handler");
-
-    cx.spawn(async move |t| {
-        let t: &mut AsyncApp = t;
-        log::info!("Postgres Connection initializing");
-        let db_client = PostgresDatabaseClient::new(&connection_string).await?;
-        let out = t
-            .update_global::<MessageHandlerRegistry, Result<()>>(|g, c| {
-                g.message_handler =
-                    Some(Arc::new(AiMessageHandler::new(Some(Arc::new(db_client)))));
-                Ok(())
-            })
-            .inspect_err(|e| log::error!("Found err when initializing message handler: {}", e))
-            .unwrap();
-
-        out
     })
 }
 
-/// Get the message handler instance
+/// Get the message handler instance in an async context
 pub fn get_message_handler(cx: &App) -> Option<Arc<AiMessageHandler>> {
     cx.global::<MessageHandlerRegistry>()
         .message_handler
         .clone()
 }
 
-/// Get the message handler instance in an async context
 pub fn get_message_handler_async(cx: &App) -> Option<Arc<AiMessageHandler>> {
-    cx.global::<MessageHandlerRegistry>()
-        .message_handler
-        .clone()
+    get_message_handler(cx)
 }
 
 /// Create a conversation ID for a new conversation

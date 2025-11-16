@@ -2,13 +2,11 @@ use crate::RequestIds;
 use crate::message_handler::{DatabaseClient, Message};
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::{Connection, Executor, PgConnection, PgPool, postgres::PgPoolOptions};
+use sqlx::{Connection, Executor, PgConnection, PgPool, postgres::PgPoolOptions, Postgres, Pool};
 use std::sync::Arc;
 use std::time::Duration;
 
-static EXECUTOR: Lazy<Executor<'static>> = Lazy::new(|| {
-    Executor::new()
-});
+
 
 /// A PostgreSQL implementation of the DatabaseClient trait
 pub struct PostgresDatabaseClient {
@@ -16,28 +14,52 @@ pub struct PostgresDatabaseClient {
 }
 
 
-
 impl PostgresDatabaseClient {
     /// Creates a new PostgreSQL database client
     pub async fn new(connection_string: &str) -> Result<Self> {
         log::info!("Connecting to postgres.");
 
-        let pool = PgPoolOptions::new()
-            .max_connections(1)
-            .acquire_timeout(Duration::from_secs(10))
-            .connect(connection_string)
-            .await?;
 
-        log::info!("Connected to postgres... initializing schema");
+        let connection_string_value = connection_string.to_string();
+        let pool: Result<Pool<Postgres>, sqlx::Error> = smol::unblock(move || {
+            smol::block_on(async move {
+                PgPoolOptions::new()
+                    .max_connections(5)
+                    .acquire_timeout(Duration::from_secs(2))
+                    .connect(&connection_string_value).await
+            })
+        }).await;
 
-        // Ensure tables exist
-        Self::initialize_schema(&pool).await?;
+        match pool {
+            Ok(p) => {
+                log::info!("Connected to postgres... initializing schema");
 
-        log::info!("Initialized schema.");
+                smol::unblock(move || {
+                    smol::block_on(async{
+                        match Self::initialize_schema(&p).await {
+                            Ok(s) => {
+                                Ok(Self {
+                                    pool: Some(Arc::new(p)),
+                                })
+                            }
+                            Err(e) => {
+                                log::error!("Could not build the pool: {:?}", e);
+                                Ok(Self {
+                                    pool: None
+                                })
+                            }
+                        }
+                    })
 
-        Ok(Self {
-            pool: Some(Arc::new(pool)),
-        })
+                }).await
+            }
+            Err(err) => {
+                log::error!("Could not build the pool: {:?}", err);
+                Ok(Self {
+                    pool: None
+                })
+            }
+        }
     }
 
     /// Initialize the database schema if it doesn't exist
@@ -178,25 +200,41 @@ impl DatabaseClient for PostgresDatabaseClient {
 
 
         let task_path = Self::_parse_task_path(&message);
-
-        let message_json_res = serde_json::to_string(&message_clone);
-
         let cloned_ids = ids.clone();
 
-        smol::spawn(
-            async move {
-                if let Ok(json) = &message_json_res {
-                    let sql_res = sqlx::raw_sql(&Self::_parse_sql_query(&cloned_ids, json, task_path))
-                        .execute(&*pool.unwrap())
-                        .await;
-                    if let Err(e) = sql_res {
-                        log::error!("Found sql err {}!", &e);
-                    }
-                } else if let Err(e) = &message_json_res {
-                    log::error!("Found err: {}", &e);
+        smol::spawn(async move {
+            let pool = match pool {
+                Some(p) => p,
+                None => {
+                    log::error!("Database pool is not initialized");
+                    return;
                 }
-            })
-            .detach();
+            };
+
+            let json = match serde_json::to_string(&message_clone) {
+                Ok(j) => j,
+                Err(e) => {
+                    log::error!("Found err: {}", e);
+                    return;
+                }
+            };
+
+            let query = Self::_parse_sql_query(&cloned_ids, &json, task_path);
+
+            let pool_clone = pool.clone();
+            let result = smol::unblock(move || {
+                smol::block_on(async {
+                    sqlx::raw_sql(&query)
+                        .execute(&*pool_clone)
+                        .await
+                })
+            }).await;
+
+            if let Err(e) = result {
+                log::error!("SQL error: {}", e);
+            }
+        }).detach();
+
     }
 }
 

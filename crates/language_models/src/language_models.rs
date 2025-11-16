@@ -104,8 +104,7 @@ fn register_language_model_providers(
     client: Arc<Client>,
     cx: &mut Context<LanguageModelRegistry>,
 ) {
-    smol::spawn(init_message_handler(MessageHandlerConfig { postgres_connection_string: None, enable_storage: true }, cx))
-        .detach();
+    init_message_handler(MessageHandlerConfig { postgres_connection_string: None, enable_storage: true }, cx);
 
     registry.register_provider(
         Arc::new(CloudLanguageModelProvider::new(

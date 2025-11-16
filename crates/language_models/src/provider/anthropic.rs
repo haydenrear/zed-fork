@@ -8,14 +8,13 @@ use collections::{BTreeMap, HashMap};
 use futures::{FutureExt, Stream, StreamExt, future, future::BoxFuture, stream::BoxStream};
 use gpui::{AnyView, App, AsyncApp, Context, Entity, Task};
 use http_client::HttpClient;
-use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db};
+use language_model::message_handler::{AiMessageHandler, LanguageModelArgs, peek_db, get_message_handler};
 use language_model::{
     _retrieve_ids, AuthenticateError, ConfigurationViewTargetAgent, LanguageModel,
     LanguageModelCacheConfiguration, LanguageModelCompletionError, LanguageModelId,
     LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
     LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,
     LanguageModelToolResultContent, MessageContent, RateLimiter, RequestIds, Role,
-    get_message_handler_async,
 };
 use language_model::{LanguageModelCompletionEvent, LanguageModelToolUse, StopReason};
 use settings::{Settings, SettingsStore};
@@ -415,7 +414,7 @@ impl LanguageModel for AnthropicModel {
         let ids = _retrieve_ids(&request);
 
         // Get message handler for saving messages
-        let message_handler = cx.update(|cx| get_message_handler_async(cx)).ok().flatten();
+        let message_handler = cx.update(|cx| get_message_handler(cx)).ok().flatten();
 
         let request_to_save = request.clone();
 
