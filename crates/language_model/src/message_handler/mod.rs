@@ -19,10 +19,11 @@ use std::env;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
+use chrono::Utc;
 use serde_json::Value;
 // pub use example::run_message_handler_example;
 use schemars::_private::NoSerialize;
-
+use cloud_api_types::Timestamp;
 pub use registry::{
     MessageHandlerConfig, MessageHandlerRegistry, create_conversation_id, get_message_handler, init_message_handler, get_message_handler_async,
     create_message_handler
@@ -328,6 +329,7 @@ impl AiMessageHandler {
         );
 
         response_metadata.insert("TAGS".into(), Self::_from_strings(&language_model_args.env));
+        response_metadata.insert("TIME".into(), Value::String(Utc::now().to_string()));
 
         if let Some(temperature) = language_model_args.temperature {
             response_metadata.insert(
@@ -546,6 +548,7 @@ impl AiMessageHandler {
 
         r.insert("acp".into(), Value::String("true".into()));
         r.insert("TAGS".into(), Self::_from_strings(&self.env));
+        r.insert("TIME".into(), Value::String(Utc::now().to_string()));
         r
     }
 
