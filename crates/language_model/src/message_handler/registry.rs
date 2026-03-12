@@ -64,7 +64,7 @@ pub fn init_message_handler(config: MessageHandlerConfig, cx: &mut App) {
         if !config.enable_storage {
             let message_handler = Arc::new(AiMessageHandler::new(None));
             registry.message_handler = Some(message_handler);
-        } else if let Ok(db_client)  = PostgresDatabaseClient::new(&connection_string).await {
+        } else if let Ok(db_client) = PostgresDatabaseClient::new(&connection_string).await {
             let message_handler = Arc::new(AiMessageHandler::new(Some(Arc::new(db_client))));
             registry.message_handler = Some(message_handler);
         } else {
@@ -94,7 +94,9 @@ pub fn create_message_handler(connection_string: MessageHandlerConfig) -> Arc<Ai
     smol::block_on(async move {
         if !connection_string.enable_storage {
             Arc::new(AiMessageHandler::new(None))
-        } else if let Ok(db_client)  = PostgresDatabaseClient::new(&connection_string.parse_cxn_string()).await {
+        } else if let Ok(db_client) =
+            PostgresDatabaseClient::new(&connection_string.parse_cxn_string()).await
+        {
             Arc::new(AiMessageHandler::new(Some(Arc::new(db_client))))
         } else {
             Arc::new(AiMessageHandler::new(None))

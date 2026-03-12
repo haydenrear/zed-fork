@@ -3,13 +3,15 @@
 [
   (addition)
   (new_file)
-] @diff.plus
+] @string
 
+; TODO: This should eventually be `@diff.plus` with a fallback of `@string`
 [
   (deletion)
   (old_file)
-] @diff.minus
+] @keyword
 
+; TODO: This should eventually be `@diff.minus` with a fallback of `@keyword`
 (commit) @constant
 
 (location) @attribute
@@ -18,11 +20,9 @@
   "diff" @function
   (argument) @variable.parameter)
 
-(filename) @string.special.path
-
 (mode) @number
 
-([
+[
   ".."
   "+"
   "++"
@@ -32,7 +32,7 @@
   "--"
   "---"
   "----"
-] @punctuation.special)
+] @punctuation.special
 
 [
   (binary_change)

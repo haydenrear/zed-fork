@@ -2,62 +2,54 @@ use crate::RequestIds;
 use crate::message_handler::{DatabaseClient, Message};
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::{Connection, Executor, PgConnection, PgPool, postgres::PgPoolOptions, Postgres, Pool};
+use sqlx::{Connection, Executor, PgConnection, PgPool, Pool, Postgres, postgres::PgPoolOptions};
 use std::sync::Arc;
 use std::time::Duration;
-
-
 
 /// A PostgreSQL implementation of the DatabaseClient trait
 pub struct PostgresDatabaseClient {
     pool: Option<Arc<PgPool>>,
 }
 
-
 impl PostgresDatabaseClient {
     /// Creates a new PostgreSQL database client
     pub async fn new(connection_string: &str) -> Result<Self> {
         log::info!("Connecting to postgres.");
-
 
         let connection_string_value = connection_string.to_string();
         let pool: Result<Pool<Postgres>, sqlx::Error> = smol::unblock(move || {
             smol::block_on(async move {
                 PgPoolOptions::new()
                     .max_connections(5)
-                    .acquire_timeout(Duration::from_secs(2))
-                    .connect(&connection_string_value).await
+                    .acquire_timeout(Duration::from_secs(10_00))
+                    .connect(&connection_string_value)
+                    .await
             })
-        }).await;
+        })
+        .await;
 
         match pool {
             Ok(p) => {
                 log::info!("Connected to postgres... initializing schema");
 
                 smol::unblock(move || {
-                    smol::block_on(async{
+                    smol::block_on(async {
                         match Self::initialize_schema(&p).await {
-                            Ok(s) => {
-                                Ok(Self {
-                                    pool: Some(Arc::new(p)),
-                                })
-                            }
+                            Ok(s) => Ok(Self {
+                                pool: Some(Arc::new(p)),
+                            }),
                             Err(e) => {
                                 log::error!("Could not build the pool: {:?}", e);
-                                Ok(Self {
-                                    pool: None
-                                })
+                                Ok(Self { pool: None })
                             }
                         }
                     })
-
-                }).await
+                })
+                .await
             }
             Err(err) => {
                 log::error!("Could not build the pool: {:?}", err);
-                Ok(Self {
-                    pool: None
-                })
+                Ok(Self { pool: None })
             }
         }
     }
@@ -116,7 +108,13 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
                             ),
                     'UTF8');
                 "#,
-            &ids.thread_id, &ids.prompt_id, &ids.session_id, &ids.checkpoint_id, &json, task_path, &json
+            &ids.thread_id,
+            &ids.prompt_id,
+            &ids.session_id,
+            &ids.checkpoint_id,
+            &json,
+            task_path,
+            &json
         );
 
         log::info!("Here is sql query\n{}", &f);
@@ -125,12 +123,14 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
     }
 
     fn _parse_task_path<'a>(message: &Vec<Message>) -> &'a str {
-        let task_paths = message.iter()
+        let task_paths = message
+            .iter()
             .flat_map(|f| {
-                f.response_metadata().get("intent").cloned().into_iter()
-                    .flat_map(|j| j.as_str()
-                        .map(|s| s.to_string())
-                        .into_iter())
+                f.response_metadata()
+                    .get("intent")
+                    .cloned()
+                    .into_iter()
+                    .flat_map(|j| j.as_str().map(|s| s.to_string()).into_iter())
             })
             .collect::<Vec<String>>();
 
@@ -140,15 +140,23 @@ create index if not exists  ide_checkpoints_thread_id_checkpoint_id_idx
             task_path = "summarization";
         }
 
-        if task_paths.iter().all(|t| t.eq("ThreadContextSummarization")) {
+        if task_paths
+            .iter()
+            .all(|t| t.eq("ThreadContextSummarization"))
+        {
             task_path = "context_summarization";
         }
 
-        if !task_path.eq("summarization") && task_paths.iter().any(|t| t.eq("ThreadSummarization")) {
+        if !task_path.eq("summarization") && task_paths.iter().any(|t| t.eq("ThreadSummarization"))
+        {
             log::error!("Found strange situation where not all were ThreadSummarization")
         }
 
-        if !task_path.eq("context_summarization") && task_paths.iter().any(|t| t.eq("ThreadContextSummarization")) {
+        if !task_path.eq("context_summarization")
+            && task_paths
+                .iter()
+                .any(|t| t.eq("ThreadContextSummarization"))
+        {
             log::error!("Found strange situation where not all were ThreadContextSummarization")
         }
         task_path
@@ -168,7 +176,6 @@ impl DatabaseClient for PostgresDatabaseClient {
             log::error!("Database pool is not initialized");
             return;
         }
-
 
         let task_path = Self::_parse_task_path(&message);
 
@@ -198,7 +205,6 @@ impl DatabaseClient for PostgresDatabaseClient {
             return;
         }
 
-
         let task_path = Self::_parse_task_path(&message);
         let cloned_ids = ids.clone();
 
@@ -223,26 +229,23 @@ impl DatabaseClient for PostgresDatabaseClient {
 
             let pool_clone = pool.clone();
             let result = smol::unblock(move || {
-                smol::block_on(async {
-                    sqlx::raw_sql(&query)
-                        .execute(&*pool_clone)
-                        .await
-                })
-            }).await;
+                smol::block_on(async { sqlx::raw_sql(&query).execute(&*pool_clone).await })
+            })
+            .await;
 
             if let Err(e) = result {
                 log::error!("SQL error: {}", e);
             }
-        }).detach();
-
+        })
+        .detach();
     }
 }
 
 #[cfg(test)]
 mod test_db_client {
-    use std::collections::HashMap;
-    use crate::{AiMessageContent, MessageContent};
     use crate::message_handler::{ContentValue, Message, PostgresDatabaseClient};
+    use crate::{AiMessageContent, MessageContent};
+    use std::collections::HashMap;
 
     #[test]
     fn test_append_messages() {
@@ -254,10 +257,14 @@ mod test_db_client {
             invalid_tool_calls: None,
             tool_calls: None,
             additional_kwargs: Default::default(),
-            response_metadata: [("intent".to_string(), serde_json::Value::String("ThreadSummarization".to_string()))].into_iter().collect::<HashMap<String, serde_json::Value>>(),
+            response_metadata: [(
+                "intent".to_string(),
+                serde_json::Value::String("ThreadSummarization".to_string()),
+            )]
+            .into_iter()
+            .collect::<HashMap<String, serde_json::Value>>(),
         }]);
 
         assert_eq!(parsed, "summarization");
     }
-
 }

@@ -26,4 +26,4 @@ serde_json.workspace = true
 settings.workspace = true
 strum.workspace = true
 thiserror.workspace = true
-log = "0.4.27"
+log.workspace = true

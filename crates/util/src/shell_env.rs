@@ -34,11 +34,13 @@ async fn capture_unix(
 ) -> Result<collections::HashMap<String, String>> {
     use std::os::unix::process::CommandExt;
 
+    use crate::command::new_std_command;
+
     let shell_kind = ShellKind::new(shell_path, false);
     let zed_path = super::get_shell_safe_zed_path(shell_kind)?;
 
     let mut command_string = String::new();
-    let mut command = std::process::Command::new(shell_path);
+    let mut command = new_std_command(shell_path);
     command.args(args);
     // In some shells, file descriptors greater than 2 cannot be used in interactive mode,
     // so file descriptor 0 (stdin) is used instead. This impacts zsh, old bash; perhaps others.
@@ -53,6 +55,7 @@ async fn capture_unix(
         // xonsh doesn't support redirecting to stdin, and control sequences are printed to
         // stdout on startup
         ShellKind::Xonsh => (FD_STDERR, "o>e".to_string()),
+        ShellKind::PowerShell => (FD_STDIN, format!(">{}", FD_STDIN)),
         _ => (FD_STDIN, format!(">&{}", FD_STDIN)), // `>&0`
     };
 
@@ -129,7 +132,7 @@ async fn spawn_and_read_fd(
 #[cfg(windows)]
 async fn capture_windows(
     shell_path: &Path,
-    _args: &[String],
+    args: &[String],
     directory: &Path,
 ) -> Result<collections::HashMap<String, String>> {
     use std::process::Stdio;
@@ -138,60 +141,70 @@ async fn capture_windows(
         std::env::current_exe().context("Failed to determine current zed executable path.")?;
 
     let shell_kind = ShellKind::new(shell_path, true);
-    if let ShellKind::Csh | ShellKind::Tcsh | ShellKind::Rc | ShellKind::Fish | ShellKind::Xonsh =
+    let directory_string = directory.display().to_string();
+    let zed_path_string = zed_path.display().to_string();
+    let quote_for_shell = |value: &str| {
         shell_kind
-    {
-        return Err(anyhow::anyhow!("unsupported shell kind"));
-    }
-    let mut cmd = crate::command::new_smol_command(shell_path);
+            .try_quote(value)
+            .map(|quoted| quoted.into_owned())
+            .unwrap_or_else(|| value.to_owned())
+    };
+    let mut cmd = crate::command::new_command(shell_path);
+    cmd.args(args);
     let cmd = match shell_kind {
-        ShellKind::Csh | ShellKind::Tcsh | ShellKind::Rc | ShellKind::Fish | ShellKind::Xonsh => {
-            unreachable!()
+        ShellKind::Csh
+        | ShellKind::Tcsh
+        | ShellKind::Rc
+        | ShellKind::Fish
+        | ShellKind::Xonsh
+        | ShellKind::Posix => {
+            let quoted_directory = quote_for_shell(&directory_string);
+            let quoted_zed_path = quote_for_shell(&zed_path_string);
+            cmd.args([
+                "-l",
+                "-i",
+                "-c",
+                &format!("cd {}; {} --printenv", quoted_directory, quoted_zed_path),
+            ])
         }
-        ShellKind::Posix => cmd.args([
-            "-c",
-            &format!(
-                "cd '{}'; '{}' --printenv",
-                directory.display(),
-                zed_path.display()
-            ),
-        ]),
-        ShellKind::PowerShell => cmd.args([
-            "-NonInteractive",
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "Set-Location '{}'; & '{}' --printenv",
-                directory.display(),
-                zed_path.display()
-            ),
-        ]),
-        ShellKind::Elvish => cmd.args([
-            "-c",
-            &format!(
-                "cd '{}'; '{}' --printenv",
-                directory.display(),
-                zed_path.display()
-            ),
-        ]),
-        ShellKind::Nushell => cmd.args([
-            "-c",
-            &format!(
-                "cd '{}'; {}'{}' --printenv",
-                directory.display(),
-                shell_kind
-                    .command_prefix()
-                    .map(|prefix| prefix.to_string())
-                    .unwrap_or_default(),
-                zed_path.display()
-            ),
-        ]),
+        ShellKind::PowerShell | ShellKind::Pwsh => {
+            let quoted_directory = ShellKind::quote_pwsh(&directory_string);
+            let quoted_zed_path = ShellKind::quote_pwsh(&zed_path_string);
+            cmd.args([
+                "-NonInteractive",
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "Set-Location {}; & {} --printenv",
+                    quoted_directory, quoted_zed_path
+                ),
+            ])
+        }
+        ShellKind::Elvish => {
+            let quoted_directory = quote_for_shell(&directory_string);
+            let quoted_zed_path = quote_for_shell(&zed_path_string);
+            cmd.args([
+                "-c",
+                &format!("cd {}; {} --printenv", quoted_directory, quoted_zed_path),
+            ])
+        }
+        ShellKind::Nushell => {
+            let quoted_directory = quote_for_shell(&directory_string);
+            let quoted_zed_path = quote_for_shell(&zed_path_string);
+            let zed_command = shell_kind
+                .prepend_command_prefix(&quoted_zed_path)
+                .into_owned();
+            cmd.args([
+                "-c",
+                &format!("cd {}; {} --printenv", quoted_directory, zed_command),
+            ])
+        }
         ShellKind::Cmd => cmd.args([
             "/c",
             "cd",
-            &directory.display().to_string(),
+            &directory_string,
             "&&",
-            &zed_path.display().to_string(),
+            &zed_path_string,
             "--printenv",
         ]),
     }

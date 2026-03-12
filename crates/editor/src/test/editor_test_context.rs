@@ -13,11 +13,10 @@ use gpui::{
 };
 use itertools::Itertools;
 use language::{Buffer, BufferSnapshot, LanguageRegistry};
-use multi_buffer::{Anchor, ExcerptRange, MultiBufferRow};
+use multi_buffer::{Anchor, ExcerptRange, MultiBufferOffset, MultiBufferRow, PathKey};
 use parking_lot::RwLock;
 use project::{FakeFs, Project};
 use std::{
-    any::TypeId,
     ops::{Deref, DerefMut, Range},
     path::Path,
     sync::{
@@ -78,7 +77,7 @@ impl EditorTestContext {
                 cx,
             );
 
-            window.focus(&editor.focus_handle(cx));
+            window.focus(&editor.focus_handle(cx), cx);
             editor
         });
         let editor_view = editor.root(cx).unwrap();
@@ -129,17 +128,33 @@ impl EditorTestContext {
     ) -> EditorTestContext {
         let mut multibuffer = MultiBuffer::new(language::Capability::ReadWrite);
         let buffer = cx.new(|cx| {
-            for excerpt in excerpts.into_iter() {
+            for (index, excerpt) in excerpts.into_iter().enumerate() {
                 let (text, ranges) = marked_text_ranges(excerpt, false);
                 let buffer = cx.new(|cx| Buffer::local(text, cx));
-                multibuffer.push_excerpts(buffer, ranges.into_iter().map(ExcerptRange::new), cx);
+                let point_ranges: Vec<_> = {
+                    let snapshot = buffer.read(cx);
+                    ranges
+                        .into_iter()
+                        .map(|range| {
+                            snapshot.offset_to_point(range.start)
+                                ..snapshot.offset_to_point(range.end)
+                        })
+                        .collect()
+                };
+                multibuffer.set_excerpts_for_path(
+                    PathKey::sorted(index as u64),
+                    buffer,
+                    point_ranges,
+                    0,
+                    cx,
+                );
             }
             multibuffer
         });
 
         let editor = cx.add_window(|window, cx| {
             let editor = build_editor(buffer, window, cx);
-            window.focus(&editor.focus_handle(cx));
+            window.focus(&editor.focus_handle(cx), cx);
 
             editor
         });
@@ -267,7 +282,7 @@ impl EditorTestContext {
         let snapshot = self.editor.update_in(&mut self.cx, |editor, window, cx| {
             editor.snapshot(window, cx)
         });
-        ranges[0].start.to_display_point(&snapshot)
+        MultiBufferOffset(ranges[0].start).to_display_point(&snapshot)
     }
 
     pub fn pixel_position(&mut self, marked_text: &str) -> Point<Pixels> {
@@ -283,12 +298,11 @@ impl EditorTestContext {
                 .head();
             let pixel_position = editor.pixel_position_of_newest_cursor.unwrap();
             let line_height = editor
-                .style()
-                .unwrap()
+                .style(cx)
                 .text
                 .line_height_in_pixels(window.rem_size());
             let snapshot = editor.snapshot(window, cx);
-            let details = editor.text_layout_details(window);
+            let details = editor.text_layout_details(window, cx);
 
             let y = pixel_position.y
                 + f32::from(line_height)
@@ -304,6 +318,12 @@ impl EditorTestContext {
         let ranges = self.ranges(marked_text);
         let snapshot = self.buffer_snapshot();
         snapshot.anchor_before(ranges[0].start)..snapshot.anchor_after(ranges[0].end)
+    }
+
+    pub async fn wait_for_autoindent_applied(&mut self) {
+        if let Some(fut) = self.update_buffer(|buffer, _| buffer.wait_for_autoindent_applied()) {
+            fut.await.ok();
+        }
     }
 
     pub fn set_head_text(&mut self, diff_base: &str) {
@@ -373,7 +393,11 @@ impl EditorTestContext {
         self.editor.update_in(&mut self.cx, |editor, window, cx| {
             editor.set_text(unmarked_text, window, cx);
             editor.change_selections(Default::default(), window, cx, |s| {
-                s.select_ranges(selection_ranges)
+                s.select_ranges(
+                    selection_ranges
+                        .into_iter()
+                        .map(|range| MultiBufferOffset(range.start)..MultiBufferOffset(range.end)),
+                )
             })
         });
         state_context
@@ -390,7 +414,11 @@ impl EditorTestContext {
         self.editor.update_in(&mut self.cx, |editor, window, cx| {
             assert_eq!(editor.text(cx), unmarked_text);
             editor.change_selections(Default::default(), window, cx, |s| {
-                s.select_ranges(selection_ranges)
+                s.select_ranges(
+                    selection_ranges
+                        .into_iter()
+                        .map(|range| MultiBufferOffset(range.start)..MultiBufferOffset(range.end)),
+                )
             })
         });
         state_context
@@ -482,11 +510,7 @@ impl EditorTestContext {
             );
             assert_eq!(
                 multibuffer_snapshot
-                    .text_for_range(Anchor::range_in_buffer(
-                        excerpt_id,
-                        snapshot.remote_id(),
-                        range.context.clone()
-                    ))
+                    .text_for_range(Anchor::range_in_buffer(excerpt_id, range.context.clone()))
                     .collect::<String>(),
                 expected_text,
                 "{}",
@@ -565,32 +589,34 @@ impl EditorTestContext {
     }
 
     #[track_caller]
-    pub fn assert_editor_background_highlights<Tag: 'static>(&mut self, marked_text: &str) {
+    pub fn assert_editor_background_highlights(&mut self, key: HighlightKey, marked_text: &str) {
         let expected_ranges = self.ranges(marked_text);
         let actual_ranges: Vec<Range<usize>> = self.update_editor(|editor, window, cx| {
             let snapshot = editor.snapshot(window, cx);
             editor
                 .background_highlights
-                .get(&HighlightKey::Type(TypeId::of::<Tag>()))
+                .get(&key)
                 .map(|h| h.1.clone())
                 .unwrap_or_default()
                 .iter()
                 .map(|range| range.to_offset(&snapshot.buffer_snapshot()))
+                .map(|range| range.start.0..range.end.0)
                 .collect()
         });
         assert_set_eq!(actual_ranges, expected_ranges);
     }
 
     #[track_caller]
-    pub fn assert_editor_text_highlights<Tag: ?Sized + 'static>(&mut self, marked_text: &str) {
+    pub fn assert_editor_text_highlights(&mut self, key: HighlightKey, marked_text: &str) {
         let expected_ranges = self.ranges(marked_text);
         let snapshot = self.update_editor(|editor, window, cx| editor.snapshot(window, cx));
         let actual_ranges: Vec<Range<usize>> = snapshot
-            .text_highlight_ranges::<Tag>()
+            .text_highlight_ranges(key)
             .map(|ranges| ranges.as_ref().clone().1)
             .unwrap_or_default()
             .into_iter()
             .map(|range| range.to_offset(&snapshot.buffer_snapshot()))
+            .map(|range| range.start.0..range.end.0)
             .collect();
         assert_set_eq!(actual_ranges, expected_ranges);
     }
@@ -608,14 +634,16 @@ impl EditorTestContext {
     fn editor_selections(&mut self) -> Vec<Range<usize>> {
         self.editor
             .update(&mut self.cx, |editor, cx| {
-                editor.selections.all::<usize>(&editor.display_snapshot(cx))
+                editor
+                    .selections
+                    .all::<MultiBufferOffset>(&editor.display_snapshot(cx))
             })
             .into_iter()
             .map(|s| {
                 if s.reversed {
-                    s.end..s.start
+                    s.end.0..s.start.0
                 } else {
-                    s.start..s.end
+                    s.start.0..s.end.0
                 }
             })
             .collect::<Vec<_>>()
@@ -663,11 +691,7 @@ impl std::fmt::Display for FormatMultiBufferAsMarkedText {
             }
 
             let mut text = multibuffer_snapshot
-                .text_for_range(Anchor::range_in_buffer(
-                    *excerpt_id,
-                    snapshot.remote_id(),
-                    range.context.clone(),
-                ))
+                .text_for_range(Anchor::range_in_buffer(*excerpt_id, range.context.clone()))
                 .collect::<String>();
 
             let selections = selections
@@ -711,7 +735,10 @@ pub fn assert_state_with_diff(
             snapshot.buffer_snapshot().clone(),
             editor
                 .selections
-                .ranges::<usize>(&snapshot.display_snapshot),
+                .ranges::<MultiBufferOffset>(&snapshot.display_snapshot)
+                .into_iter()
+                .map(|range| range.start.0..range.end.0)
+                .collect::<Vec<_>>(),
         )
     });
 

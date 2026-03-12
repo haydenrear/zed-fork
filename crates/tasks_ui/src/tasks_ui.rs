@@ -316,7 +316,9 @@ pub fn task_contexts(
 
     let lsp_task_sources = active_editor
         .as_ref()
-        .map(|active_editor| active_editor.update(cx, |editor, cx| editor.lsp_task_sources(cx)))
+        .map(|active_editor| {
+            active_editor.update(cx, |editor, cx| editor.lsp_task_sources(false, false, cx))
+        })
         .unwrap_or_default();
 
     let latest_selection = active_editor.as_ref().map(|active_editor| {
@@ -392,7 +394,7 @@ fn worktree_context(worktree_abs_path: &Path) -> TaskContext {
 mod tests {
     use std::{collections::HashMap, sync::Arc};
 
-    use editor::{Editor, SelectionEffects};
+    use editor::{Editor, MultiBufferOffset, SelectionEffects};
     use gpui::TestAppContext;
     use language::{Language, LanguageConfig};
     use project::{BasicContextProvider, FakeFs, Project, task_store::TaskStore};
@@ -400,7 +402,7 @@ mod tests {
     use task::{TaskContext, TaskVariables, VariableName};
     use ui::VisualContext;
     use util::{path, rel_path::rel_path};
-    use workspace::{AppState, Workspace};
+    use workspace::{AppState, MultiWorkspace};
 
     use crate::task_contexts;
 
@@ -474,8 +476,9 @@ mod tests {
         let worktree_id = project.update(cx, |project, cx| {
             project.worktrees(cx).next().unwrap().read(cx).id()
         });
-        let (workspace, cx) =
-            cx.add_window_view(|window, cx| Workspace::test_new(project.clone(), window, cx));
+        let (multi_workspace, cx) =
+            cx.add_window_view(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
+        let workspace = multi_workspace.read_with(cx, |mw, _| mw.workspace().clone());
 
         let buffer1 = workspace
             .update(cx, |this, cx| {
@@ -539,7 +542,7 @@ mod tests {
         // And now, let's select an identifier.
         editor2.update_in(cx, |editor, window, cx| {
             editor.change_selections(SelectionEffects::no_scroll(), window, cx, |selections| {
-                selections.select_ranges([14..18])
+                selections.select_ranges([MultiBufferOffset(14)..MultiBufferOffset(18)])
             })
         });
 

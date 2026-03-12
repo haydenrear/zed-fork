@@ -118,17 +118,20 @@ pub fn new_journal_entry(workspace: &Workspace, window: &mut Window, cx: &mut Ap
                     })?
                     .await?;
                 new_workspace
-                    .update(cx, |workspace, window, cx| {
-                        workspace.open_paths(
-                            vec![entry_path],
-                            workspace::OpenOptions {
-                                visible: Some(OpenVisible::All),
-                                ..Default::default()
-                            },
-                            None,
-                            window,
-                            cx,
-                        )
+                    .update(cx, |multi_workspace, window, cx| {
+                        let workspace = multi_workspace.workspace().clone();
+                        workspace.update(cx, |workspace, cx| {
+                            workspace.open_paths(
+                                vec![entry_path],
+                                workspace::OpenOptions {
+                                    visible: Some(OpenVisible::All),
+                                    ..Default::default()
+                                },
+                                None,
+                                window,
+                                cx,
+                            )
+                        })
                     })?
                     .await
             } else {
@@ -159,7 +162,7 @@ pub fn new_journal_entry(workspace: &Workspace, window: &mut Window, cx: &mut Ap
                         cx,
                         |s| s.select_ranges([len..len]),
                     );
-                    if len > 0 {
+                    if len.0 > 0 {
                         editor.insert("\n\n", window, cx);
                     }
                     editor.insert(&entry_heading, window, cx);

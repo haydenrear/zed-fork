@@ -36,7 +36,7 @@ use ui::{
 use util::ResultExt;
 use util::rel_path::RelPath;
 use workspace::searchable::Direction;
-use workspace::{Workspace, WorkspaceDb, WorkspaceId};
+use workspace::{MultiWorkspace, Workspace, WorkspaceDb, WorkspaceId};
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Mode {
@@ -67,15 +67,11 @@ impl Display for Mode {
 }
 
 impl Mode {
-    pub fn is_visual(self) -> bool {
+    pub fn is_visual(&self) -> bool {
         match self {
             Self::Visual | Self::VisualLine | Self::VisualBlock | Self::HelixSelect => true,
             Self::Normal | Self::Insert | Self::Replace | Self::HelixNormal => false,
         }
-    }
-
-    pub fn is_helix(self) -> bool {
-        matches!(self, Mode::HelixNormal | Mode::HelixSelect)
     }
 }
 
@@ -146,6 +142,11 @@ pub enum Operator {
     HelixPrevious {
         around: bool,
     },
+    HelixSurroundAdd,
+    HelixSurroundReplace {
+        replaced_char: Option<char>,
+    },
+    HelixSurroundDelete,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -221,6 +222,7 @@ pub struct VimGlobals {
     pub forced_motion: bool,
     pub stop_recording_after_next_action: bool,
     pub ignore_current_insertion: bool,
+    pub recording_count: Option<usize>,
     pub recorded_count: Option<usize>,
     pub recording_actions: Vec<ReplayableAction>,
     pub recorded_actions: Vec<ReplayableAction>,
@@ -513,7 +515,7 @@ impl MarksState {
         cx: &mut Context<Self>,
     ) {
         let on_change = cx.subscribe(buffer_handle, move |this, buffer, event, cx| match event {
-            BufferEvent::Edited => {
+            BufferEvent::Edited { .. } => {
                 if let Some(path) = this.path_for_buffer(&buffer, cx) {
                     this.serialize_buffer_marks(path, &buffer, cx);
                 }
@@ -553,6 +555,10 @@ impl MarksState {
         let buffer = multibuffer.read(cx).as_singleton();
         let abs_path = buffer.as_ref().and_then(|b| self.path_for_buffer(b, cx));
 
+        if self.is_global_mark(&name) && self.global_marks.contains_key(&name) {
+            self.delete_mark(name.clone(), multibuffer, cx);
+        }
+
         let Some(abs_path) = abs_path else {
             self.multibuffer_marks
                 .entry(multibuffer.entity_id())
@@ -576,7 +582,7 @@ impl MarksState {
 
         let buffer_id = buffer.read(cx).remote_id();
         self.buffer_marks.entry(buffer_id).or_default().insert(
-            name,
+            name.clone(),
             anchors
                 .into_iter()
                 .map(|anchor| anchor.text_anchor)
@@ -584,6 +590,10 @@ impl MarksState {
         );
         if !self.watched_buffers.contains_key(&buffer_id) {
             self.watch_buffer(MarkLocation::Path(abs_path.clone()), &buffer, cx)
+        }
+        if self.is_global_mark(&name) {
+            self.global_marks
+                .insert(name, MarkLocation::Path(abs_path.clone()));
         }
         self.serialize_buffer_marks(abs_path, &buffer, cx)
     }
@@ -602,14 +612,12 @@ impl MarksState {
                 return Some(Mark::Local(anchors.get(name)?.clone()));
             }
 
-            let singleton = multi_buffer.read(cx).as_singleton()?;
-            let excerpt_id = *multi_buffer.read(cx).excerpt_ids().first()?;
-            let buffer_id = singleton.read(cx).remote_id();
+            let (excerpt_id, buffer_id, _) = multi_buffer.read(cx).read(cx).as_singleton()?;
             if let Some(anchors) = self.buffer_marks.get(&buffer_id) {
                 let text_anchors = anchors.get(name)?;
                 let anchors = text_anchors
                     .iter()
-                    .map(|anchor| Anchor::in_buffer(excerpt_id, buffer_id, *anchor))
+                    .map(|anchor| Anchor::in_buffer(excerpt_id, *anchor))
                     .collect();
                 return Some(Mark::Local(anchors));
             }
@@ -721,12 +729,16 @@ impl VimGlobals {
                 });
                 GlobalCommandPaletteInterceptor::set(cx, command_interceptor);
                 for window in cx.windows() {
-                    if let Some(workspace) = window.downcast::<Workspace>() {
-                        workspace
-                            .update(cx, |workspace, _, cx| {
-                                Vim::update_globals(cx, |globals, cx| {
-                                    globals.register_workspace(workspace, cx)
-                                });
+                    if let Some(multi_workspace) = window.downcast::<MultiWorkspace>() {
+                        multi_workspace
+                            .update(cx, |multi_workspace, _, cx| {
+                                for workspace in multi_workspace.workspaces() {
+                                    workspace.update(cx, |workspace, cx| {
+                                        Vim::update_globals(cx, |globals, cx| {
+                                            globals.register_workspace(workspace, cx)
+                                        });
+                                    });
+                                }
                             })
                             .ok();
                     }
@@ -902,6 +914,7 @@ impl VimGlobals {
             if self.stop_recording_after_next_action {
                 self.dot_recording = false;
                 self.recorded_actions = std::mem::take(&mut self.recording_actions);
+                self.recorded_count = self.recording_count.take();
                 self.stop_recording_after_next_action = false;
             }
         }
@@ -928,6 +941,7 @@ impl VimGlobals {
             if self.stop_recording_after_next_action {
                 self.dot_recording = false;
                 self.recorded_actions = std::mem::take(&mut self.recording_actions);
+                self.recorded_count = self.recording_count.take();
                 self.stop_recording_after_next_action = false;
             }
         }
@@ -983,7 +997,7 @@ impl Clone for ReplayableAction {
     }
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Default, Debug)]
 pub struct SearchState {
     pub direction: Direction,
     pub count: usize,
@@ -991,7 +1005,8 @@ pub struct SearchState {
     pub prior_selections: Vec<Range<Anchor>>,
     pub prior_operator: Option<Operator>,
     pub prior_mode: Mode,
-    pub is_helix_regex_search: bool,
+    pub helix_select: bool,
+    pub _dismiss_subscription: Option<gpui::Subscription>,
 }
 
 impl Operator {
@@ -1036,6 +1051,9 @@ impl Operator {
             Operator::HelixMatch => "helix_m",
             Operator::HelixNext { .. } => "helix_next",
             Operator::HelixPrevious { .. } => "helix_previous",
+            Operator::HelixSurroundAdd => "helix_ms",
+            Operator::HelixSurroundReplace { .. } => "helix_mr",
+            Operator::HelixSurroundDelete => "helix_md",
         }
     }
 
@@ -1060,6 +1078,14 @@ impl Operator {
             Operator::HelixMatch => "m".to_string(),
             Operator::HelixNext { .. } => "]".to_string(),
             Operator::HelixPrevious { .. } => "[".to_string(),
+            Operator::HelixSurroundAdd => "ms".to_string(),
+            Operator::HelixSurroundReplace {
+                replaced_char: None,
+            } => "mr".to_string(),
+            Operator::HelixSurroundReplace {
+                replaced_char: Some(c),
+            } => format!("mr{}", c),
+            Operator::HelixSurroundDelete => "md".to_string(),
             _ => self.id().to_string(),
         }
     }
@@ -1104,6 +1130,9 @@ impl Operator {
             | Operator::HelixMatch
             | Operator::HelixNext { .. }
             | Operator::HelixPrevious { .. } => false,
+            Operator::HelixSurroundAdd
+            | Operator::HelixSurroundReplace { .. }
+            | Operator::HelixSurroundDelete => true,
         }
     }
 
@@ -1129,7 +1158,10 @@ impl Operator {
             | Operator::DeleteSurrounds
             | Operator::Exchange
             | Operator::HelixNext { .. }
-            | Operator::HelixPrevious { .. } => true,
+            | Operator::HelixPrevious { .. }
+            | Operator::HelixSurroundAdd
+            | Operator::HelixSurroundReplace { .. }
+            | Operator::HelixSurroundDelete => true,
             Operator::Yank
             | Operator::Object { .. }
             | Operator::FindForward { .. }
