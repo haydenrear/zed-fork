@@ -83,7 +83,7 @@ fn _parse_cxn_string(config: &MessageHandlerConfig) -> String {
             // Use environment variable if available
             std::env::var("ZED_LLM_POSTGRES_URL").unwrap_or_else(|_| {
                 // Create a message handler without database support
-                "postgresql://postgres:postgres@localhost:5488/postgres".to_string()
+                "postgresql://postgres:postgres@localhost:5644/postgres".to_string()
             })
         }
     };

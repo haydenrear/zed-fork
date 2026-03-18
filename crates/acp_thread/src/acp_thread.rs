@@ -1125,7 +1125,7 @@ impl AcpThread {
 
         let g = create_message_handler(MessageHandlerConfig {
             postgres_connection_string: None,
-            enable_storage: true,
+            enable_storage: !std::env::var("DISABLE_STORAGE").is_ok(),
         });
 
         Self {
@@ -1887,6 +1887,14 @@ impl AcpThread {
         } else {
             None
         };
+
+        let ids = _retrieve_ids_from(&self.session_id, self.title.to_string());
+        for block in &message {
+            self.ai_message_handler.save_acp(
+                &acp::SessionUpdate::UserMessageChunk(acp::ContentChunk::new(block.clone())),
+                &ids,
+            );
+        }
 
         self.run_turn(cx, async move |this, cx| {
             this.update(cx, |this, cx| {

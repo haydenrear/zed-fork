@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONTAINER_NAME="zed-test-postgres-5877"
+PG_PORT=5877
+PG_USER="zed_test"
+PG_PASS="zed_test"
+PG_DB="zed_test"
+CONNECTION_STRING="postgres://${PG_USER}:${PG_PASS}@localhost:${PG_PORT}/${PG_DB}"
+
+cleanup() {
+    echo "Stopping test postgres container..."
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+}
+
+trap cleanup EXIT
+
+# Remove any leftover container from a previous run
+docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
+echo "Starting test postgres on port ${PG_PORT}..."
+docker run -d \
+    --name "$CONTAINER_NAME" \
+    -e POSTGRES_USER="$PG_USER" \
+    -e POSTGRES_PASSWORD="$PG_PASS" \
+    -e POSTGRES_DB="$PG_DB" \
+    -p "${PG_PORT}:5432" \
+    postgres:16-alpine
+
+echo "Waiting for postgres to be ready..."
+for i in $(seq 1 30); do
+    if docker exec "$CONTAINER_NAME" pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null 2>&1; then
+        echo "Postgres is ready."
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        echo "Timed out waiting for postgres."
+        exit 1
+    fi
+    sleep 1
+done
+
+mkdir -p ~/db
+echo "Running integration tests..."
+TEST_POSTGRES_URL="$CONNECTION_STRING" \
+ZED_POSTGRES_DEBUG="$HOME/db/zed-db.log" \
+    cargo test -p language_model --test postgres_integration -- --nocapture --test-threads=1 "$@"
+
+echo "Tests passed."

@@ -14,7 +14,7 @@ use crate::{
 use chrono::Utc;
 use enum_fields::EnumFields;
 use gpui::Global;
-pub use postgres::PostgresDatabaseClient;
+pub use postgres::{PostgresDatabaseClient, WriteRequest};
 use ratelimit::Ratelimiter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -597,11 +597,116 @@ impl AiMessageHandler {
                     response_metadata,
                 })
             }
-            LanguageModelCompletionEvent::ToolUseJsonParseError { .. } => None,
-            LanguageModelCompletionEvent::Queued { .. } => None,
-            LanguageModelCompletionEvent::Started => None,
-            LanguageModelCompletionEvent::StartMessage { .. } => None,
-            LanguageModelCompletionEvent::ReasoningDetails(_) => None,
+            LanguageModelCompletionEvent::ToolUseJsonParseError {
+                id,
+                tool_name,
+                raw_input,
+                json_parse_error,
+            } => {
+                let mut additional_kwargs = HashMap::new();
+                additional_kwargs.insert(
+                    "raw_input".to_string(),
+                    serde_json::Value::String(raw_input.to_string()),
+                );
+                additional_kwargs.insert(
+                    "json_parse_error".to_string(),
+                    serde_json::Value::String(json_parse_error.clone()),
+                );
+
+                Some(Message::Tool {
+                    content: ContentValue::new(raw_input.to_string()),
+                    id: id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    tool_call_id: Some(id.to_string()),
+                    tool_name: Some(tool_name.to_string()),
+                    additional_kwargs,
+                    response_metadata,
+                })
+            }
+            LanguageModelCompletionEvent::StartMessage { message_id } => {
+                let mut additional_kwargs = HashMap::new();
+                additional_kwargs.insert(
+                    "event".to_string(),
+                    serde_json::Value::String("start_message".to_string()),
+                );
+
+                Some(Message::Ai {
+                    content: ContentValue::new(String::new()),
+                    id: message_id.clone(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    invalid_tool_calls: None,
+                    tool_calls: None,
+                    additional_kwargs,
+                    response_metadata,
+                })
+            }
+            LanguageModelCompletionEvent::ReasoningDetails(details) => {
+                let content = match serde_json::to_string(details) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        log::error!("Failed to serialize reasoning details: {}", e);
+                        String::default()
+                    }
+                };
+                let mut additional_kwargs = HashMap::new();
+                additional_kwargs.insert(
+                    "reasoning_details".to_string(),
+                    details.clone(),
+                );
+
+                Some(Message::Ai {
+                    content: ContentValue::new(content),
+                    id: thread_id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    invalid_tool_calls: None,
+                    tool_calls: None,
+                    additional_kwargs,
+                    response_metadata,
+                })
+            }
+            LanguageModelCompletionEvent::Queued { position } => {
+                let mut additional_kwargs = HashMap::new();
+                additional_kwargs.insert(
+                    "event".to_string(),
+                    serde_json::Value::String("queued".to_string()),
+                );
+                additional_kwargs.insert(
+                    "position".to_string(),
+                    serde_json::Value::Number((*position).into()),
+                );
+
+                Some(Message::Ai {
+                    content: ContentValue::new(String::new()),
+                    id: thread_id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    invalid_tool_calls: None,
+                    tool_calls: None,
+                    additional_kwargs,
+                    response_metadata,
+                })
+            }
+            LanguageModelCompletionEvent::Started => {
+                let mut additional_kwargs = HashMap::new();
+                additional_kwargs.insert(
+                    "event".to_string(),
+                    serde_json::Value::String("started".to_string()),
+                );
+
+                Some(Message::Ai {
+                    content: ContentValue::new(String::new()),
+                    id: thread_id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    invalid_tool_calls: None,
+                    tool_calls: None,
+                    additional_kwargs,
+                    response_metadata,
+                })
+            }
             LanguageModelCompletionEvent::Text(text) => {
                 let id = thread_id.to_string();
                 Some(Message::Ai {
@@ -682,7 +787,32 @@ impl AiMessageHandler {
                     response_metadata,
                 })
             }
-            LanguageModelCompletionEvent::UsageUpdate(_token_usage) => None,
+            LanguageModelCompletionEvent::UsageUpdate(token_usage) => {
+                let mut additional_kwargs = HashMap::new();
+                additional_kwargs.insert(
+                    "event".to_string(),
+                    serde_json::Value::String("usage_update".to_string()),
+                );
+                additional_kwargs.insert(
+                    "input_tokens".to_string(),
+                    serde_json::Value::Number(token_usage.input_tokens.into()),
+                );
+                additional_kwargs.insert(
+                    "output_tokens".to_string(),
+                    serde_json::Value::Number(token_usage.output_tokens.into()),
+                );
+
+                Some(Message::Ai {
+                    content: ContentValue::new(String::new()),
+                    id: thread_id.to_string(),
+                    name: Some("ZedIdeAgent".to_string()),
+                    example: false,
+                    invalid_tool_calls: None,
+                    tool_calls: None,
+                    additional_kwargs,
+                    response_metadata,
+                })
+            }
         }
     }
 
