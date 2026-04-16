@@ -1119,9 +1119,30 @@ impl GitStore {
     }
 
     pub fn checkpoint(&self, cx: &mut App) -> Task<Result<GitStoreCheckpoint>> {
+        // Skip repositories nested inside another discovered repository's working
+        // directory (a repo-in-a-repo that isn't a submodule). Per-turn checkpoints
+        // on a broken nested repo can hang indefinitely, and restore isn't
+        // meaningful across nested repo boundaries anyway.
+        let all_repo_paths: Vec<Arc<Path>> = self
+            .repositories
+            .values()
+            .map(|repo| repo.read(cx).snapshot.work_directory_abs_path.clone())
+            .collect();
+
         let mut work_directory_abs_paths = Vec::new();
         let mut checkpoints = Vec::new();
         for repository in self.repositories.values() {
+            let repo_path = repository.read(cx).snapshot.work_directory_abs_path.clone();
+            let is_nested = all_repo_paths.iter().any(|other| {
+                other.as_ref() != repo_path.as_ref() && repo_path.starts_with(other.as_ref())
+            });
+            if is_nested {
+                log::debug!(
+                    "git_store: skipping checkpoint for nested repository at {}",
+                    repo_path.display()
+                );
+                continue;
+            }
             repository.update(cx, |repository, _| {
                 work_directory_abs_paths.push(repository.snapshot.work_directory_abs_path.clone());
                 checkpoints.push(repository.checkpoint().map(|checkpoint| checkpoint?));
