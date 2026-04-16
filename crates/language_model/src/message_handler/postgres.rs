@@ -99,29 +99,19 @@ impl PostgresDatabaseClient {
         }
     }
 
-    /// Execute a single write: check offset, insert message, update offset
+    /// Execute a single write: insert message with a per-thread sequence_id, skip if duplicate
     pub async fn execute_write(pool: &PgPool, request: &WriteRequest) -> Result<()> {
         let json = serde_json::to_string(&request.messages)?;
-
-        // Phase 1: Check current offset to see if this message was already saved
         let message_hash = Self::compute_message_hash(&json);
 
-        let existing: Option<(i64,)> = sqlx::query_as(
-            "SELECT last_message_offset FROM ide_checkpoint_offsets_v2 \
-             WHERE thread_id = $1 AND checkpoint_id = $2",
-        )
-        .bind(&request.ids.thread_id)
-        .bind(&request.ids.checkpoint_id)
-        .fetch_optional(&*pool)
-        .await?;
-
-        let current_offset = existing.map(|(offset,)| offset).unwrap_or(0);
-
-        // Phase 2: Insert the message into the messages table
-        let maybe_new_offset: Option<i64> = sqlx::query_scalar::<_, i64>(
+        // Assign the next sequence_id scoped to this (thread_id, checkpoint_id) by taking
+        // MAX(sequence_id) + 1. COALESCE handles the empty-table case, yielding 1.
+        let inserted_sequence_id: Option<i64> = sqlx::query_scalar::<_, i64>(
             "INSERT INTO ide_checkpoint_messages_v2 \
-             (thread_id, checkpoint_id, prompt_id, session_id, message_hash, messages, task_path) \
-             VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7) \
+             (sequence_id, thread_id, checkpoint_id, prompt_id, session_id, message_hash, messages, task_path) \
+             SELECT COALESCE(MAX(sequence_id), 0) + 1, $1, $2, $3, $4, $5, $6::jsonb, $7 \
+             FROM ide_checkpoint_messages_v2 \
+             WHERE thread_id = $1 AND checkpoint_id = $2 \
              ON CONFLICT (thread_id, checkpoint_id, message_hash) DO NOTHING \
              RETURNING sequence_id",
         )
@@ -135,36 +125,31 @@ impl PostgresDatabaseClient {
         .fetch_optional(&*pool)
         .await?;
 
-        let new_offset = match maybe_new_offset {
-            Some(offset) => {
+        match inserted_sequence_id {
+            Some(sequence_id) => {
                 Self::debug_log(&format!(
                     "Inserted message: thread_id={}, checkpoint_id={}, hash={}, sequence_id={}",
-                    &request.ids.thread_id, &request.ids.checkpoint_id, message_hash, offset
+                    &request.ids.thread_id, &request.ids.checkpoint_id, message_hash, sequence_id
                 ));
-                offset
+
+                sqlx::query(
+                    "INSERT INTO ide_checkpoint_offsets_v2 (thread_id, checkpoint_id, last_message_offset) \
+                     VALUES ($1, $2, $3) \
+                     ON CONFLICT (thread_id, checkpoint_id) \
+                     DO UPDATE SET last_message_offset = GREATEST(ide_checkpoint_offsets_v2.last_message_offset, $3)",
+                )
+                .bind(&request.ids.thread_id)
+                .bind(&request.ids.checkpoint_id)
+                .bind(sequence_id)
+                .execute(&*pool)
+                .await?;
             }
             None => {
                 Self::debug_log(&format!(
-                    "Skipped duplicate message: thread_id={}, checkpoint_id={}, hash={}, current_offset={}",
-                    &request.ids.thread_id, &request.ids.checkpoint_id, message_hash, current_offset
+                    "Skipped duplicate message: thread_id={}, checkpoint_id={}, hash={}",
+                    &request.ids.thread_id, &request.ids.checkpoint_id, message_hash
                 ));
-                current_offset
             }
-        };
-
-        // Phase 3: Update the offset tracker
-        if new_offset > current_offset {
-            sqlx::query(
-                "INSERT INTO ide_checkpoint_offsets_v2 (thread_id, checkpoint_id, last_message_offset) \
-                 VALUES ($1, $2, $3) \
-                 ON CONFLICT (thread_id, checkpoint_id) \
-                 DO UPDATE SET last_message_offset = GREATEST(ide_checkpoint_offsets_v2.last_message_offset, $3)",
-            )
-            .bind(&request.ids.thread_id)
-            .bind(&request.ids.checkpoint_id)
-            .bind(new_offset)
-            .execute(&*pool)
-            .await?;
         }
 
         Ok(())
@@ -202,7 +187,7 @@ CREATE INDEX IF NOT EXISTS ide_checkpoints_v2_thread_id_checkpoint_id_idx
 
 CREATE TABLE IF NOT EXISTS ide_checkpoint_messages_v2
 (
-    sequence_id    BIGSERIAL             NOT NULL,
+    sequence_id    BIGINT                NOT NULL,
     thread_id      text                  NOT NULL,
     checkpoint_id  text                  NOT NULL,
     prompt_id      text                  NOT NULL,
@@ -211,7 +196,7 @@ CREATE TABLE IF NOT EXISTS ide_checkpoint_messages_v2
     created_at     TIMESTAMPTZ           DEFAULT now() NOT NULL,
     messages       JSONB                 NOT NULL,
     task_path      text                  DEFAULT '' NOT NULL,
-    PRIMARY KEY (sequence_id),
+    PRIMARY KEY (thread_id, checkpoint_id, sequence_id),
     UNIQUE (thread_id, checkpoint_id, message_hash)
 );
 

@@ -113,7 +113,7 @@ fn test_messages_inserted_in_order() {
             );
         }
 
-        // Verify offset was updated to the last sequence_id
+        // Verify offset equals the count of messages inserted for this thread
         let offset: (i64,) = sqlx::query_as(
             "SELECT last_message_offset FROM ide_checkpoint_offsets_v2 \
              WHERE thread_id = $1 AND checkpoint_id = $2",
@@ -124,10 +124,7 @@ fn test_messages_inserted_in_order() {
         .await
         .expect("offset should exist");
 
-        assert_eq!(
-            offset.0, previous_sequence_id,
-            "offset should equal the last sequence_id"
-        );
+        assert_eq!(offset.0, 20, "offset should equal the count of inserted messages");
     });
 }
 
@@ -390,7 +387,7 @@ fn test_under_load() {
                 );
             }
 
-            // Verify offset matches last sequence_id
+            // Verify offset equals the count of messages for this thread
             let offset: (i64,) = sqlx::query_as(
                 "SELECT last_message_offset FROM ide_checkpoint_offsets_v2 \
                  WHERE thread_id = $1 AND checkpoint_id = $2",
@@ -401,10 +398,9 @@ fn test_under_load() {
             .await
             .expect("offset should exist");
 
-            let last_seq = rows.last().expect("should have rows").0;
             assert_eq!(
-                offset.0, last_seq,
-                "offset should match last sequence_id for checkpoint {}",
+                offset.0, messages_per_thread as i64,
+                "offset should equal the message count for checkpoint {}",
                 checkpoint_id
             );
         }

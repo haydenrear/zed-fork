@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use credentials_provider::CredentialsProvider;
 use fs::Fs;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use futures::{Stream, TryFutureExt, stream};
@@ -56,6 +57,7 @@ pub struct OllamaLanguageModelProvider {
 
 pub struct State {
     api_key_state: ApiKeyState,
+    credentials_provider: Arc<dyn CredentialsProvider>,
     http_client: Arc<dyn HttpClient>,
     fetched_models: Vec<ollama::Model>,
     fetch_model_task: Option<Task<Result<()>>>,
@@ -67,10 +69,15 @@ impl State {
     }
 
     fn set_api_key(&mut self, api_key: Option<String>, cx: &mut Context<Self>) -> Task<Result<()>> {
+        let credentials_provider = self.credentials_provider.clone();
         let api_url = OllamaLanguageModelProvider::api_url(cx);
-        let task = self
-            .api_key_state
-            .store(api_url, api_key, |this| &mut this.api_key_state, cx);
+        let task = self.api_key_state.store(
+            api_url,
+            api_key,
+            |this| &mut this.api_key_state,
+            credentials_provider,
+            cx,
+        );
 
         self.fetched_models.clear();
         cx.spawn(async move |this, cx| {
@@ -82,10 +89,14 @@ impl State {
     }
 
     fn authenticate(&mut self, cx: &mut Context<Self>) -> Task<Result<(), AuthenticateError>> {
+        let credentials_provider = self.credentials_provider.clone();
         let api_url = OllamaLanguageModelProvider::api_url(cx);
-        let task = self
-            .api_key_state
-            .load_if_needed(api_url, |this| &mut this.api_key_state, cx);
+        let task = self.api_key_state.load_if_needed(
+            api_url,
+            |this| &mut this.api_key_state,
+            credentials_provider,
+            cx,
+        );
 
         // Always try to fetch models - if no API key is needed (local Ollama), it will work
         // If API key is needed and provided, it will work
@@ -159,7 +170,11 @@ impl State {
 }
 
 impl OllamaLanguageModelProvider {
-    pub fn new(http_client: Arc<dyn HttpClient>, cx: &mut App) -> Self {
+    pub fn new(
+        http_client: Arc<dyn HttpClient>,
+        credentials_provider: Arc<dyn CredentialsProvider>,
+        cx: &mut App,
+    ) -> Self {
         let this = Self {
             http_client: http_client.clone(),
             state: cx.new(|cx| {
@@ -172,6 +187,14 @@ impl OllamaLanguageModelProvider {
                             let url_changed = last_settings.api_url != current_settings.api_url;
                             last_settings = current_settings.clone();
                             if url_changed {
+                                let credentials_provider = this.credentials_provider.clone();
+                                let api_url = Self::api_url(cx);
+                                this.api_key_state.handle_url_change(
+                                    api_url,
+                                    |this| &mut this.api_key_state,
+                                    credentials_provider,
+                                    cx,
+                                );
                                 this.fetched_models.clear();
                                 this.authenticate(cx).detach();
                             }
@@ -186,6 +209,7 @@ impl OllamaLanguageModelProvider {
                     fetched_models: Default::default(),
                     fetch_model_task: None,
                     api_key_state: ApiKeyState::new(Self::api_url(cx), (*API_KEY_ENV_VAR).clone()),
+                    credentials_provider,
                 }
             }),
         };
@@ -402,7 +426,14 @@ impl OllamaLanguageModel {
             stream: true,
             options: Some(ChatOptions {
                 num_ctx: Some(self.model.max_tokens),
-                stop: Some(request.stop),
+                // Only send stop tokens if explicitly provided. When empty/None,
+                // Ollama will use the model's default stop tokens from its Modelfile.
+                // Sending an empty array would override and disable the defaults.
+                stop: if request.stop.is_empty() {
+                    None
+                } else {
+                    Some(request.stop)
+                },
                 temperature: request.temperature.or(Some(1.0)),
                 ..Default::default()
             }),
@@ -886,9 +917,7 @@ impl ConfigurationView {
                 .child(
                     Button::new("reset-context-window", "Reset")
                         .label_size(LabelSize::Small)
-                        .icon(IconName::Undo)
-                        .icon_size(IconSize::Small)
-                        .icon_position(IconPosition::Start)
+                        .start_icon(Icon::new(IconName::Undo).size(IconSize::Small))
                         .layer(ElevationIndex::ModalSurface)
                         .on_click(
                             cx.listener(|this, _, window, cx| {
@@ -933,9 +962,7 @@ impl ConfigurationView {
                 .child(
                     Button::new("reset-api-url", "Reset API URL")
                         .label_size(LabelSize::Small)
-                        .icon(IconName::Undo)
-                        .icon_size(IconSize::Small)
-                        .icon_position(IconPosition::Start)
+                        .start_icon(Icon::new(IconName::Undo).size(IconSize::Small))
                         .layer(ElevationIndex::ModalSurface)
                         .on_click(
                             cx.listener(|this, _, window, cx| this.reset_api_url(window, cx)),
@@ -977,9 +1004,11 @@ impl Render for ConfigurationView {
                                     this.child(
                                         Button::new("ollama-site", "Ollama")
                                             .style(ButtonStyle::Subtle)
-                                            .icon(IconName::ArrowUpRight)
-                                            .icon_size(IconSize::XSmall)
-                                            .icon_color(Color::Muted)
+                                            .end_icon(
+                                                Icon::new(IconName::ArrowUpRight)
+                                                    .size(IconSize::XSmall)
+                                                    .color(Color::Muted),
+                                            )
                                             .on_click(move |_, _, cx| cx.open_url(OLLAMA_SITE))
                                             .into_any_element(),
                                     )
@@ -987,9 +1016,11 @@ impl Render for ConfigurationView {
                                     this.child(
                                         Button::new("download_ollama_button", "Download Ollama")
                                             .style(ButtonStyle::Subtle)
-                                            .icon(IconName::ArrowUpRight)
-                                            .icon_size(IconSize::XSmall)
-                                            .icon_color(Color::Muted)
+                                            .end_icon(
+                                                Icon::new(IconName::ArrowUpRight)
+                                                    .size(IconSize::XSmall)
+                                                    .color(Color::Muted),
+                                            )
                                             .on_click(move |_, _, cx| {
                                                 cx.open_url(OLLAMA_DOWNLOAD_URL)
                                             })
@@ -1000,9 +1031,11 @@ impl Render for ConfigurationView {
                             .child(
                                 Button::new("view-models", "View All Models")
                                     .style(ButtonStyle::Subtle)
-                                    .icon(IconName::ArrowUpRight)
-                                    .icon_size(IconSize::XSmall)
-                                    .icon_color(Color::Muted)
+                                    .end_icon(
+                                        Icon::new(IconName::ArrowUpRight)
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Muted),
+                                    )
                                     .on_click(move |_, _, cx| cx.open_url(OLLAMA_LIBRARY_URL)),
                             ),
                     )
@@ -1033,9 +1066,9 @@ impl Render for ConfigurationView {
                         } else {
                             this.child(
                                 Button::new("retry_ollama_models", "Connect")
-                                    .icon_position(IconPosition::Start)
-                                    .icon_size(IconSize::XSmall)
-                                    .icon(IconName::PlayOutlined)
+                                    .start_icon(
+                                        Icon::new(IconName::PlayOutlined).size(IconSize::XSmall),
+                                    )
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.retry_connection(window, cx)
                                     })),

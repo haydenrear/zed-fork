@@ -17,8 +17,10 @@ schemars = ["dep:schemars"]
 
 [dependencies]
 anyhow.workspace = true
+collections.workspace = true
 futures.workspace = true
 http_client.workspace = true
+language_model_core.workspace = true
 rand.workspace = true
 schemars = { workspace = true, optional = true }
 log.workspace = true
@@ -29,3 +31,7 @@ futures-timer = "3"
 strum.workspace = true
 regex = "1.11.1"
 thiserror.workspace = true
+tiktoken-rs.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true
